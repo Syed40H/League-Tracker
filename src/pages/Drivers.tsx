@@ -23,7 +23,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
-import { storage } from "@/lib/storage"; // ✅ NEW: keep localStorage in sync
 
 const Drivers = () => {
   const [leaguePlayers, setLeaguePlayers] = useState<LeaguePlayer[]>([]);
@@ -32,45 +31,47 @@ const Drivers = () => {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
 
-  // 🔹 Load league players from Supabase on mount
-  useEffect(() => {
-    const loadPlayers = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("league_players")
-          .select("*");
+  // 🔹 Helper: load league players from Supabase
+  const fetchPlayers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("league_players")
+        .select("*")
+        .order("id", { ascending: true });
 
-        if (error) {
-          console.error("Error loading league_players:", error);
-          toast({
-            title: "Error",
-            description: "Could not load league players from the server.",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        if (data) {
-          const mapped: LeaguePlayer[] = data.map((row: any) => ({
-            id: row.id,
-            name: row.name,
-            driverId: row.driver_id,
-          }));
-          setLeaguePlayers(mapped);
-          storage.setLeaguePlayers(mapped); // ✅ sync local copy so other screens see same data
-        }
-      } catch (e) {
-        console.error("Unexpected error loading league_players:", e);
+      if (error) {
+        console.error("Error loading league_players:", error);
         toast({
           title: "Error",
-          description: "Unexpected error loading league players.",
+          description: error.message || "Could not load league players from the server.",
           variant: "destructive",
         });
+        return;
       }
-    };
 
-    loadPlayers();
-  }, [toast]);
+      if (data) {
+        const mapped: LeaguePlayer[] = data.map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          driverId: row.driver_id,
+        }));
+        setLeaguePlayers(mapped);
+      }
+    } catch (e) {
+      console.error("Unexpected error loading league_players:", e);
+      toast({
+        title: "Error",
+        description: "Unexpected error loading league players.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Load players on mount
+  useEffect(() => {
+    fetchPlayers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const assignedDriverIds = leaguePlayers.map((p) => p.driverId);
   const availableDrivers = drivers.filter(
@@ -134,18 +135,14 @@ const Drivers = () => {
       return;
     }
 
+    // Update local state from returned row
     const newPlayer: LeaguePlayer = {
       id: data.id,
       name: data.name,
       driverId: data.driver_id,
     };
 
-    setLeaguePlayers((prev) => {
-      const updated = [...prev, newPlayer];
-      storage.setLeaguePlayers(updated); // ✅ update localStorage
-      return updated;
-    });
-
+    setLeaguePlayers((prev) => [...prev, newPlayer]);
     setNewPlayerName("");
     setSelectedDriverId("");
 
@@ -155,6 +152,9 @@ const Drivers = () => {
         drivers.find((d) => d.id === selectedDriverId)?.name
       }`,
     });
+
+    // 🔁 Re-fetch from DB to stay in sync (just in case)
+    await fetchPlayers();
   };
 
   const handleRemovePlayer = async (playerId: string) => {
@@ -167,6 +167,7 @@ const Drivers = () => {
       return;
     }
 
+    // 🔹 Delete from Supabase
     const { error } = await supabase
       .from("league_players")
       .delete()
@@ -183,16 +184,16 @@ const Drivers = () => {
       return;
     }
 
-    setLeaguePlayers((prev) => {
-      const updated = prev.filter((p) => p.id !== playerId);
-      storage.setLeaguePlayers(updated); // ✅ update localStorage on delete
-      return updated;
-    });
+    // Update local state
+    setLeaguePlayers((prev) => prev.filter((p) => p.id !== playerId));
 
     toast({
       title: "Player removed",
       description: "Driver assignment has been removed",
     });
+
+    // 🔁 Re-fetch to be 100% sure we match the DB
+    await fetchPlayers();
   };
 
   const handleResetAllPlayers = async () => {
@@ -210,10 +211,7 @@ const Drivers = () => {
     );
     if (!confirmed) return;
 
-    const { error } = await supabase
-      .from("league_players")
-      .delete()
-      .neq("id", ""); // delete all rows (id is never "")
+    const { error } = await supabase.from("league_players").delete().neq("id", "");
 
     if (error) {
       console.error("Error resetting league_players:", error);
@@ -227,12 +225,14 @@ const Drivers = () => {
     }
 
     setLeaguePlayers([]);
-    storage.setLeaguePlayers([]); // ✅ clear local copy too
 
     toast({
       title: "League players reset",
       description: "All league player assignments have been cleared.",
     });
+
+    // 🔁 Ensure we’re in sync
+    await fetchPlayers();
   };
 
   return (
