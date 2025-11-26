@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 const AdminLogin = () => {
-  const { login, isAdmin } = useAuth();
+  const { login, isAdmin, user, logout, loading } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -11,95 +14,100 @@ const AdminLogin = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg("");
+
     const { error } = await login(email, password);
-    if (error) setErrorMsg(error);
-    else navigate("/");
+    if (error) {
+      setErrorMsg(error);
+    } else {
+      navigate("/");
+    }
   };
 
-  if (isAdmin) {
-    navigate("/");
+  // While AuthProvider is still checking Supabase session
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">Checking session…</p>
+      </div>
+    );
   }
 
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "#0b0b0f",
-        color: "white",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "400px",
-          padding: "24px",
-          borderRadius: "12px",
-          background: "#15151c",
-          boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
-        }}
-      >
-        <h1 style={{ fontSize: "1.5rem", marginBottom: "16px", textAlign: "center" }}>
-          Admin Login
-        </h1>
-
-        <form
-          onSubmit={handleSubmit}
-          style={{ display: "flex", flexDirection: "column", gap: "12px" }}
-        >
-          <input
-            type="email"
-            placeholder="Admin email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{
-              padding: "8px 10px",
-              borderRadius: "6px",
-              border: "1px solid #444",
-              background: "#0f0f15",
-              color: "white",
-            }}
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{
-              padding: "8px 10px",
-              borderRadius: "6px",
-              border: "1px solid #444",
-              background: "#0f0f15",
-              color: "white",
-            }}
-          />
-
-          {errorMsg && (
-            <p style={{ color: "#f97373", fontSize: "0.9rem" }}>{errorMsg}</p>
-          )}
-
-          <button
-            type="submit"
-            style={{
-              marginTop: "8px",
-              width: "100%",
-              padding: "10px",
-              borderRadius: "6px",
-              border: "none",
-              background: "#ea4335",
-              color: "white",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            Log in
-          </button>
-        </form>
+  // If already logged in, show info + actions instead of kicking you away
+  if (isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Admin</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              You are already logged in as{" "}
+              <span className="font-semibold">{user?.email}</span>.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => navigate("/")}
+              >
+                Go to Home
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                className="flex-1"
+                onClick={async () => {
+                  await logout();
+                  // stay on /admin so you can log in again
+                  navigate("/admin");
+                }}
+              >
+                Log out
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+    );
+  }
+
+  // Normal login form when not logged in
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle>Admin Login</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <Input
+              type="email"
+              placeholder="Admin email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+            />
+            <Input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+            />
+            {errorMsg && (
+              <p className="text-sm text-red-500">{errorMsg}</p>
+            )}
+            <Button type="submit" className="w-full">
+              Log in
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 };
