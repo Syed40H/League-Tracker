@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabaseClient";
 
 const RaceEntry = () => {
   const { raceId } = useParams();
@@ -24,24 +25,67 @@ const RaceEntry = () => {
   const [fastestLap, setFastestLap] = useState("");
   const [mostOvertakes, setMostOvertakes] = useState("");
   const [cleanestDriver, setCleanestDriver] = useState("");
+  const [loading, setLoading] = useState(true);
 
+  // Load race result from Supabase (shared) → then fallback to localStorage
   useEffect(() => {
-    if (race) {
-      const existingResult = storage.getRaceResult(race.id);
-      if (existingResult) {
-        setTopTen(existingResult.topTen);
-        setDriverOfTheDay(existingResult.driverOfTheDay);
-        setFastestLap(existingResult.fastestLap);
-        setMostOvertakes(existingResult.mostOvertakes);
-        setCleanestDriver(existingResult.cleanestDriver);
+    const loadResult = async () => {
+      if (!race) {
+        setLoading(false);
+        return;
       }
-    }
+
+      try {
+        const { data, error } = await supabase
+          .from("race_results")
+          .select("*")
+          .eq("race_id", race.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error("Supabase load error:", error);
+        }
+
+        if (data) {
+          // Convert Supabase row → state
+          setTopTen(data.top_ten || Array(10).fill(""));
+          setDriverOfTheDay(data.driver_of_the_day || "");
+          setFastestLap(data.fastest_lap || "");
+          setMostOvertakes(data.most_overtakes || "");
+          setCleanestDriver(data.cleanest_driver || "");
+
+          // Also sync into localStorage so standings use it
+          const syncedResult: RaceResult = {
+            raceId: race.id,
+            topTen: data.top_ten || Array(10).fill(""),
+            driverOfTheDay: data.driver_of_the_day || "",
+            fastestLap: data.fastest_lap || "",
+            mostOvertakes: data.most_overtakes || "",
+            cleanestDriver: data.cleanest_driver || "",
+          };
+          storage.saveRaceResult(syncedResult);
+        } else {
+          // No Supabase data yet → fallback to local
+          const existingResult = storage.getRaceResult(race.id);
+          if (existingResult) {
+            setTopTen(existingResult.topTen);
+            setDriverOfTheDay(existingResult.driverOfTheDay);
+            setFastestLap(existingResult.fastestLap);
+            setMostOvertakes(existingResult.mostOvertakes);
+            setCleanestDriver(existingResult.cleanestDriver);
+          }
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadResult();
   }, [race]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!race) return;
 
-    // 🔒 Block non-admins from saving
     if (!isAdmin) {
       toast({
         title: "Not allowed",
@@ -62,7 +106,6 @@ const RaceEntry = () => {
       return;
     }
 
-    // Check for duplicates
     const uniqueDrivers = new Set(topTen);
     if (uniqueDrivers.size !== 10) {
       toast({
@@ -91,18 +134,44 @@ const RaceEntry = () => {
       cleanestDriver,
     };
 
+    // Save to Supabase (shared)
+    const { error } = await supabase.from("race_results").upsert(
+      {
+        race_id: race.id,
+        top_ten: topTen,
+        driver_of_the_day: driverOfTheDay,
+        fastest_lap: fastestLap,
+        most_overtakes: mostOvertakes,
+        cleanest_driver: cleanestDriver,
+      },
+      {
+        onConflict: "race_id",
+      }
+    );
+
+    if (error) {
+      console.error("Supabase save error:", error);
+      toast({
+        title: "Save failed",
+        description: "Could not save to the server. Try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Still also save to localStorage for this device
     storage.saveRaceResult(result);
 
     toast({
       title: "Race Saved",
-      description: `Results for ${race.name} have been saved`,
+      description: `Results for ${race.name} have been saved and synced.`,
     });
 
     navigate("/standings");
   };
 
-  // 🔁 Reset JUST this race back to empty
-  const handleResetRace = () => {
+  // Reset JUST this race
+  const handleResetRace = async () => {
     if (!race) return;
 
     if (!isAdmin) {
@@ -117,7 +186,6 @@ const RaceEntry = () => {
     const confirmed = window.confirm(
       `This will clear all saved results for ${race.name} and reset it back to empty. Are you sure?`
     );
-
     if (!confirmed) return;
 
     const emptyTopTen = Array(10).fill("");
@@ -129,7 +197,32 @@ const RaceEntry = () => {
     setMostOvertakes("");
     setCleanestDriver("");
 
-    // Save a "blank" result so standings recalculate as zero / not completed
+    // Save blank to Supabase
+    const { error } = await supabase.from("race_results").upsert(
+      {
+        race_id: race.id,
+        top_ten: emptyTopTen,
+        driver_of_the_day: "",
+        fastest_lap: "",
+        most_overtakes: "",
+        cleanest_driver: "",
+      },
+      {
+        onConflict: "race_id",
+      }
+    );
+
+    if (error) {
+      console.error("Supabase reset error:", error);
+      toast({
+        title: "Reset failed",
+        description: "Could not reset on the server.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Also clear in localStorage
     const blankResult: RaceResult = {
       raceId: race.id,
       topTen: emptyTopTen,
@@ -138,7 +231,6 @@ const RaceEntry = () => {
       mostOvertakes: "",
       cleanestDriver: "",
     };
-
     storage.saveRaceResult(blankResult);
 
     toast({
@@ -151,6 +243,14 @@ const RaceEntry = () => {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p>Race not found</p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Loading race data...</p>
       </div>
     );
   }
@@ -182,7 +282,7 @@ const RaceEntry = () => {
         </header>
 
         <div className="container mx-auto px-4 py-8">
-          {/* Top 10 Results */}
+          {/* Top 10 */}
           <Card className="mb-6">
             <CardHeader>
               <CardTitle>Race Results - Top 10</CardTitle>
@@ -322,7 +422,7 @@ const RaceEntry = () => {
             </Card>
           </div>
 
-          {/* Save / Reset Buttons */}
+          {/* Save / Reset buttons */}
           <div className="space-y-3">
             {!isAdmin && (
               <p className="text-sm text-center text-muted-foreground">
