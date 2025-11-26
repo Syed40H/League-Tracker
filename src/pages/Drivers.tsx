@@ -23,7 +23,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
-import { storage } from "@/lib/storage";
+import { storage } from "@/lib/storage"; // ✅ NEW: keep localStorage in sync
 
 const Drivers = () => {
   const [leaguePlayers, setLeaguePlayers] = useState<LeaguePlayer[]>([]);
@@ -38,8 +38,7 @@ const Drivers = () => {
       try {
         const { data, error } = await supabase
           .from("league_players")
-          .select("*")
-          .order("created_at", { ascending: true });
+          .select("*");
 
         if (error) {
           console.error("Error loading league_players:", error);
@@ -58,8 +57,7 @@ const Drivers = () => {
             driverId: row.driver_id,
           }));
           setLeaguePlayers(mapped);
-          // keep localStorage in sync so standings / fallback use same data
-          storage.setLeaguePlayers(mapped);
+          storage.setLeaguePlayers(mapped); // ✅ sync local copy so other screens see same data
         }
       } catch (e) {
         console.error("Unexpected error loading league_players:", e);
@@ -144,7 +142,7 @@ const Drivers = () => {
 
     setLeaguePlayers((prev) => {
       const updated = [...prev, newPlayer];
-      storage.setLeaguePlayers(updated); // sync local copy
+      storage.setLeaguePlayers(updated); // ✅ update localStorage
       return updated;
     });
 
@@ -187,7 +185,7 @@ const Drivers = () => {
 
     setLeaguePlayers((prev) => {
       const updated = prev.filter((p) => p.id !== playerId);
-      storage.setLeaguePlayers(updated); // sync local copy
+      storage.setLeaguePlayers(updated); // ✅ update localStorage on delete
       return updated;
     });
 
@@ -197,8 +195,7 @@ const Drivers = () => {
     });
   };
 
-  // 🔹 HARD RESET: remove all league players
-  const handleResetLeaguePlayers = async () => {
+  const handleResetAllPlayers = async () => {
     if (!isAdmin) {
       toast({
         title: "Not allowed",
@@ -209,15 +206,14 @@ const Drivers = () => {
     }
 
     const confirmed = window.confirm(
-      "This will remove ALL league players. Driver list stays, but all player names will be cleared. Are you sure?"
+      "This will remove ALL league players (but not the real F1 drivers). Are you sure?"
     );
     if (!confirmed) return;
 
-    // delete all rows in league_players
     const { error } = await supabase
       .from("league_players")
       .delete()
-      .not("id", "is", null); // delete every row
+      .neq("id", ""); // delete all rows (id is never "")
 
     if (error) {
       console.error("Error resetting league_players:", error);
@@ -231,7 +227,7 @@ const Drivers = () => {
     }
 
     setLeaguePlayers([]);
-    storage.setLeaguePlayers([]); // clear local copy too
+    storage.setLeaguePlayers([]); // ✅ clear local copy too
 
     toast({
       title: "League players reset",
@@ -250,26 +246,10 @@ const Drivers = () => {
                 Back to Home
               </Button>
             </Link>
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-foreground">
-                  Driver Setup
-                </h1>
-                <p className="text-muted-foreground mt-2">
-                  Assign up to 5 league players to F1 drivers
-                </p>
-              </div>
-              {isAdmin && leaguePlayers.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleResetLeaguePlayers}
-                >
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  Reset League Players
-                </Button>
-              )}
-            </div>
+            <h1 className="text-3xl font-bold text-foreground">Driver Setup</h1>
+            <p className="text-muted-foreground mt-2">
+              Assign up to 5 league players to F1 drivers
+            </p>
           </div>
         </header>
 
@@ -330,9 +310,21 @@ const Drivers = () => {
 
           {/* Current Assignments */}
           <Card>
-            <CardHeader>
-              <CardTitle>Current Assignments</CardTitle>
-              <CardDescription>Your league player roster</CardDescription>
+            <CardHeader className="flex items-center justify-between">
+              <div>
+                <CardTitle>Current Assignments</CardTitle>
+                <CardDescription>Your league player roster</CardDescription>
+              </div>
+              {isAdmin && leaguePlayers.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResetAllPlayers}
+                >
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Reset League Players
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               {leaguePlayers.length === 0 ? (
