@@ -21,15 +21,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔁 Keep Supabase auth session in sync
+  // keep session in sync
   useEffect(() => {
-    // On first load, get current session
     supabase.auth.getSession().then(({ data }) => {
       setUser(data.session?.user ?? null);
       setLoading(false);
     });
 
-    // Listen to login/logout changes
     const { data: sub } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setUser(session?.user ?? null);
@@ -42,7 +40,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  // 🔐 Real login using Supabase Auth
+  // REAL SUPABASE LOGIN
   const login = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -62,7 +60,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       value={{
         loading,
         user,
-        isAdmin: !!user, // any logged-in user is admin
+        isAdmin: !!user,
         login,
         logout,
       }}
