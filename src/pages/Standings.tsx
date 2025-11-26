@@ -21,15 +21,17 @@ import {
   calculateConstructorStandings,
 } from "@/lib/standings";
 import { supabase } from "@/lib/supabaseClient";
-import type { RaceResult } from "@/types/league";
+import type { RaceResult, LeaguePlayer } from "@/types/league";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
 const Standings = () => {
   const [raceResults, setRaceResults] = useState<RaceResult[]>([]);
+  const [leaguePlayers, setLeaguePlayers] = useState<LeaguePlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
+  // 🔹 Load race results
   useEffect(() => {
     const loadResults = async () => {
       const { data, error } = await supabase.from("race_results").select("*");
@@ -62,8 +64,34 @@ const Standings = () => {
     loadResults();
   }, [toast]);
 
-  const driverStandings = calculateDriverStandings(raceResults);
-  const constructorStandings = calculateConstructorStandings(raceResults);
+  // 🔹 Load league players (for names)
+  useEffect(() => {
+    const loadLeaguePlayers = async () => {
+      const { data, error } = await supabase.from("league_players").select("*");
+
+      if (error) {
+        console.error("Error loading league_players:", error);
+        return;
+      }
+
+      const mapped: LeaguePlayer[] =
+        (data || []).map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          driverId: row.driver_id,
+        })) ?? [];
+
+      setLeaguePlayers(mapped);
+    };
+
+    loadLeaguePlayers();
+  }, []);
+
+  const driverStandings = calculateDriverStandings(raceResults, leaguePlayers);
+  const constructorStandings = calculateConstructorStandings(
+    raceResults,
+    leaguePlayers
+  );
 
   const getTopAwardHolder = (
     key: "driverOfTheDay" | "fastestLap" | "mostOvertakes" | "cleanestDriver"
@@ -206,14 +234,22 @@ const Standings = () => {
                   </TableBody>
                 </Table>
               </div>
+              {driverStandings.length === 0 && (
+                <p className="text-center text-muted-foreground py-8">
+                  No race results yet.
+                </p>
+              )}
             </CardContent>
           </Card>
 
-          {/* Award leaders */}
+          {/* Award summary */}
           {driverStandings.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm">Award Leaders</CardTitle>
+                <CardDescription>
+                  Drivers leading in each special award category
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">

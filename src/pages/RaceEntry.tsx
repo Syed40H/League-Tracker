@@ -1,14 +1,34 @@
 import { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Save, Trophy, Zap, TrendingUp, Award, RotateCcw } from "lucide-react";
+import {
+  ArrowLeft,
+  Save,
+  Trophy,
+  Zap,
+  TrendingUp,
+  Award,
+  RotateCcw,
+} from "lucide-react";
 import { races } from "@/data/races";
 import { drivers } from "@/data/drivers";
 import { storage } from "@/lib/storage";
 import { RaceResult } from "@/types/league";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
@@ -54,7 +74,7 @@ const RaceEntry = () => {
           setMostOvertakes(data.most_overtakes || "");
           setCleanestDriver(data.cleanest_driver || "");
 
-          // Also sync into localStorage so standings use it
+          // Also sync into localStorage so standings use it (legacy)
           const syncedResult: RaceResult = {
             raceId: race.id,
             topTen: data.top_ten || Array(10).fill(""),
@@ -153,7 +173,7 @@ const RaceEntry = () => {
       console.error("Supabase save error:", error);
       toast({
         title: "Save failed",
-        description: "Could not save to the server. Try again.",
+        description: error.message || "Could not save to the server. Try again.",
         variant: "destructive",
       });
       return;
@@ -216,7 +236,7 @@ const RaceEntry = () => {
       console.error("Supabase reset error:", error);
       toast({
         title: "Reset failed",
-        description: "Could not reset on the server.",
+        description: error.message || "Could not reset on the server.",
         variant: "destructive",
       });
       return;
@@ -272,7 +292,9 @@ const RaceEntry = () => {
             <div className="flex items-center gap-3 mb-2">
               <div className="text-4xl">{race.flag}</div>
               <div>
-                <h1 className="text-3xl font-bold text-foreground">{race.name}</h1>
+                <h1 className="text-3xl font-bold text-foreground">
+                  {race.name}
+                </h1>
                 <p className="text-muted-foreground">
                   {race.circuit} - Round {race.id}
                 </p>
@@ -286,14 +308,18 @@ const RaceEntry = () => {
           <Card className="mb-6">
             <CardHeader>
               <CardTitle>Race Results - Top 10</CardTitle>
-              <CardDescription>Select finishing positions to automatically award points</CardDescription>
+              <CardDescription>
+                Select finishing positions to automatically award points
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid md:grid-cols-2 gap-4">
                 {Array.from({ length: 10 }, (_, i) => (
                   <div key={i} className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label htmlFor={`position-${i + 1}`}>Position {i + 1}</Label>
+                      <Label htmlFor={`position-${i + 1}`}>
+                        Position {i + 1}
+                      </Label>
                       <span className="text-sm font-semibold text-primary">
                         {POINTS_SYSTEM[i]} pts
                       </span>
@@ -314,7 +340,10 @@ const RaceEntry = () => {
                           <SelectItem
                             key={driver.id}
                             value={driver.id}
-                            disabled={selectedDriverIds.has(driver.id) && topTen[i] !== driver.id}
+                            disabled={
+                              selectedDriverIds.has(driver.id) &&
+                              topTen[i] !== driver.id
+                            }
                           >
                             {driver.flag} {driver.name} - {driver.team}
                           </SelectItem>
@@ -337,7 +366,10 @@ const RaceEntry = () => {
                 </div>
               </CardHeader>
               <CardContent>
-                <Select value={driverOfTheDay} onValueChange={setDriverOfTheDay}>
+                <Select
+                  value={driverOfTheDay}
+                  onValueChange={setDriverOfTheDay}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select driver" />
                   </SelectTrigger>
@@ -383,7 +415,10 @@ const RaceEntry = () => {
                 </div>
               </CardHeader>
               <CardContent>
-                <Select value={mostOvertakes} onValueChange={setMostOvertakes}>
+                <Select
+                  value={mostOvertakes}
+                  onValueChange={setMostOvertakes}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select driver" />
                   </SelectTrigger>
@@ -406,7 +441,10 @@ const RaceEntry = () => {
                 </div>
               </CardHeader>
               <CardContent>
-                <Select value={cleanestDriver} onValueChange={setCleanestDriver}>
+                <Select
+                  value={cleanestDriver}
+                  onValueChange={setCleanestDriver}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select driver" />
                   </SelectTrigger>
@@ -426,11 +464,17 @@ const RaceEntry = () => {
           <div className="space-y-3">
             {!isAdmin && (
               <p className="text-sm text-center text-muted-foreground">
-                You can view results, but only the league admin can save or reset this race.
+                You can view results, but only the league admin can save or
+                reset this race.
               </p>
             )}
 
-            <Button onClick={handleSave} size="lg" className="w-full" disabled={!isAdmin}>
+            <Button
+              onClick={handleSave}
+              size="lg"
+              className="w-full"
+              disabled={!isAdmin}
+            >
               <Save className="mr-2 h-5 w-5" />
               Save Race Results
             </Button>

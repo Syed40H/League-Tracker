@@ -1,33 +1,36 @@
 import { drivers } from "@/data/drivers";
 import type {
-  RaceResult,
   DriverStanding,
   ConstructorStanding,
+  RaceResult,
   LeaguePlayer,
 } from "@/types/league";
 
 const POINTS_SYSTEM = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 
-/**
- * Calculate driver standings from Supabase-fed raceResults
- */
 export function calculateDriverStandings(
   raceResults: RaceResult[],
   leaguePlayers: LeaguePlayer[] = []
 ): DriverStanding[] {
   const standingsMap = new Map<string, DriverStanding>();
 
+  // Quick lookup: driverId -> league player
+  const leagueByDriver = new Map<string, LeaguePlayer>();
+  leaguePlayers.forEach((p) => {
+    if (p?.driverId) {
+      leagueByDriver.set(p.driverId, p);
+    }
+  });
+
   // Initialize all drivers
   drivers.forEach((driver) => {
-    const assignedPlayer = leaguePlayers.find(
-      (p) => p.driverId === driver.id
-    );
+    const leaguePlayer = leagueByDriver.get(driver.id);
 
     standingsMap.set(driver.id, {
       driverId: driver.id,
       driverName: driver.name,
       team: driver.team,
-      leaguePlayerName: assignedPlayer?.name ?? null,
+      leaguePlayerName: leaguePlayer?.name,
       points: 0,
       awards: {
         driverOfTheDay: 0,
@@ -38,62 +41,56 @@ export function calculateDriverStandings(
     });
   });
 
-  // Apply all race results
-  for (const result of raceResults) {
-    // Points for top 10
+  // Aggregate every race
+  raceResults.forEach((result) => {
+    if (!result || !Array.isArray(result.topTen)) return;
+
+    // Top 10 points
     result.topTen.forEach((driverId, index) => {
       if (!driverId) return;
+      if (index >= POINTS_SYSTEM.length) return;
+
       const standing = standingsMap.get(driverId);
-      if (standing && index < POINTS_SYSTEM.length) {
-        standing.points += POINTS_SYSTEM[index];
-      }
+      if (!standing) return;
+
+      standing.points += POINTS_SYSTEM[index];
     });
 
     // Awards
     const awards = [
-      { id: result.driverOfTheDay, key: "driverOfTheDay" as const },
-      { id: result.fastestLap, key: "fastestLap" as const },
-      { id: result.mostOvertakes, key: "mostOvertakes" as const },
-      { id: result.cleanestDriver, key: "cleanestDriver" as const },
+      { driverId: result.driverOfTheDay, key: "driverOfTheDay" as const },
+      { driverId: result.fastestLap, key: "fastestLap" as const },
+      { driverId: result.mostOvertakes, key: "mostOvertakes" as const },
+      { driverId: result.cleanestDriver, key: "cleanestDriver" as const },
     ];
 
-    awards.forEach(({ id, key }) => {
-      if (!id) return;
-      const standing = standingsMap.get(id);
-      if (standing) {
-        standing.awards[key]++;
-      }
+    awards.forEach(({ driverId, key }) => {
+      if (!driverId) return;
+      const standing = standingsMap.get(driverId);
+      if (!standing) return;
+      standing.awards[key] += 1;
     });
-  }
+  });
 
-  // Return sorted list
   return Array.from(standingsMap.values()).sort(
     (a, b) => b.points - a.points
   );
 }
 
-/**
- * Calculate constructor standings
- */
 export function calculateConstructorStandings(
   raceResults: RaceResult[],
   leaguePlayers: LeaguePlayer[] = []
 ): ConstructorStanding[] {
-  const driverStandings = calculateDriverStandings(
-    raceResults,
-    leaguePlayers
-  );
+  const driverStandings = calculateDriverStandings(raceResults, leaguePlayers);
 
-  const map = new Map<string, number>();
+  const constructorMap = new Map<string, number>();
 
   driverStandings.forEach((standing) => {
-    map.set(
-      standing.team,
-      (map.get(standing.team) || 0) + standing.points
-    );
+    const current = constructorMap.get(standing.team) ?? 0;
+    constructorMap.set(standing.team, current + standing.points);
   });
 
-  return Array.from(map.entries())
+  return Array.from(constructorMap.entries())
     .map(([team, points]) => ({ team, points }))
     .sort((a, b) => b.points - a.points);
 }

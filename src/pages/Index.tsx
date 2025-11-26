@@ -34,16 +34,17 @@ import { races } from "@/data/races";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabaseClient";
-import type { RaceResult } from "@/types/league";
+import type { RaceResult, LeaguePlayer } from "@/types/league";
 
 const Index = () => {
   const { isAdmin } = useAuth();
   const { toast } = useToast();
 
   const [raceResults, setRaceResults] = useState<RaceResult[]>([]);
+  const [leaguePlayers, setLeaguePlayers] = useState<LeaguePlayer[]>([]);
   const [loadingResults, setLoadingResults] = useState(true);
 
-  // 🔹 Load race results from Supabase on mount
+  // 🔹 Load race results from Supabase
   useEffect(() => {
     const loadResults = async () => {
       const { data, error } = await supabase.from("race_results").select("*");
@@ -76,8 +77,35 @@ const Index = () => {
     loadResults();
   }, [toast]);
 
-  const driverStandings = calculateDriverStandings(raceResults);
-  const constructorStandings = calculateConstructorStandings(raceResults);
+  // 🔹 Load league players from Supabase (so EVERYONE sees names without opening /drivers)
+  useEffect(() => {
+    const loadLeaguePlayers = async () => {
+      const { data, error } = await supabase.from("league_players").select("*");
+
+      if (error) {
+        console.error("Error loading league_players:", error);
+        // Not fatal; standings still work, just no league names
+        return;
+      }
+
+      const mapped: LeaguePlayer[] =
+        (data || []).map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          driverId: row.driver_id,
+        })) ?? [];
+
+      setLeaguePlayers(mapped);
+    };
+
+    loadLeaguePlayers();
+  }, []);
+
+  const driverStandings = calculateDriverStandings(raceResults, leaguePlayers);
+  const constructorStandings = calculateConstructorStandings(
+    raceResults,
+    leaguePlayers
+  );
 
   // ✅ Only mark races as completed if all 10 positions are filled
   const completedRaceIds = new Set(
@@ -91,7 +119,7 @@ const Index = () => {
       .map((r) => r.raceId)
   );
 
-  // Helper: who leads an award + how many
+  // Helpers for awards
   const getTopAwardHolder = (
     key: "driverOfTheDay" | "fastestLap" | "mostOvertakes" | "cleanestDriver"
   ) => {
@@ -140,7 +168,7 @@ const Index = () => {
 
     if (!confirmed) return;
 
-    // Still clears any old localStorage-based data
+    // Clears any old localStorage-based data
     localStorage.clear();
 
     toast({
@@ -173,7 +201,6 @@ const Index = () => {
                 </h1>
               </div>
               <div className="flex items-center gap-3">
-                {/* Show Admin link for everyone, but only logged-in user can actually use it */}
                 <Link to="/admin">
                   <Button variant="outline" size="sm">
                     Admin
@@ -201,6 +228,7 @@ const Index = () => {
               <TabsTrigger value="constructors">Constructors</TabsTrigger>
             </TabsList>
 
+            {/* Drivers tab */}
             <TabsContent value="drivers">
               <Card>
                 <CardHeader>
@@ -239,9 +267,15 @@ const Index = () => {
                             className={index < 3 ? "bg-primary/5" : ""}
                           >
                             <TableCell className="font-bold">
-                              {index === 0 && <span className="text-2xl">🥇</span>}
-                              {index === 1 && <span className="text-2xl">🥈</span>}
-                              {index === 2 && <span className="text-2xl">🥉</span>}
+                              {index === 0 && (
+                                <span className="text-2xl">🥇</span>
+                              )}
+                              {index === 1 && (
+                                <span className="text-2xl">🥈</span>
+                              )}
+                              {index === 2 && (
+                                <span className="text-2xl">🥉</span>
+                              )}
                               {index > 2 && index + 1}
                             </TableCell>
                             <TableCell className="font-semibold">
@@ -289,6 +323,7 @@ const Index = () => {
                 </CardContent>
               </Card>
 
+              {/* Award legend */}
               {driverStandings.length > 0 && (
                 <Card className="mt-6">
                   <CardHeader>
@@ -355,6 +390,7 @@ const Index = () => {
               )}
             </TabsContent>
 
+            {/* Constructors tab */}
             <TabsContent value="constructors">
               <Card>
                 <CardHeader>
@@ -379,9 +415,15 @@ const Index = () => {
                           className={index < 3 ? "bg-primary/5" : ""}
                         >
                           <TableCell className="font-bold">
-                            {index === 0 && <span className="text-2xl">🥇</span>}
-                            {index === 1 && <span className="text-2xl">🥈</span>}
-                            {index === 2 && <span className="text-2xl">🥉</span>}
+                            {index === 0 && (
+                              <span className="text-2xl">🥇</span>
+                            )}
+                            {index === 1 && (
+                              <span className="text-2xl">🥈</span>
+                            )}
+                            {index === 2 && (
+                              <span className="text-2xl">🥉</span>
+                            )}
                             {index > 2 && index + 1}
                           </TableCell>
                           <TableCell className="font-semibold">
