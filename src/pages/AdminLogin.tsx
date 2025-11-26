@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,7 +6,6 @@ import { Button } from "@/components/ui/button";
 
 const AdminLogin = () => {
   const { login, isAdmin, user, logout, loading } = useAuth();
-  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -20,11 +18,11 @@ const AdminLogin = () => {
     if (error) {
       setErrorMsg(error);
     } else {
-      navigate("/");
+      // stay on /admin, no redirect — you can go home using nav/header
     }
   };
 
-  // While AuthProvider is still checking Supabase session
+  // While we don't know if there's an existing session yet
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -33,7 +31,7 @@ const AdminLogin = () => {
     );
   }
 
-  // If already logged in, show info + actions instead of kicking you away
+  // Already logged in
   if (isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -43,7 +41,7 @@ const AdminLogin = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              You are already logged in as{" "}
+              You are logged in as{" "}
               <span className="font-semibold">{user?.email}</span>.
             </p>
             <div className="flex gap-2">
@@ -51,9 +49,10 @@ const AdminLogin = () => {
                 type="button"
                 variant="outline"
                 className="flex-1"
-                onClick={() => navigate("/")}
+                asChild
               >
-                Go to Home
+                {/* Use normal link behavior to go home */}
+                <a href="/">Go to Home</a>
               </Button>
               <Button
                 type="button"
@@ -61,8 +60,7 @@ const AdminLogin = () => {
                 className="flex-1"
                 onClick={async () => {
                   await logout();
-                  // stay on /admin so you can log in again
-                  navigate("/admin");
+                  // after logout, you stay on /admin and see the login form again
                 }}
               >
                 Log out
@@ -74,7 +72,7 @@ const AdminLogin = () => {
     );
   }
 
-  // Normal login form when not logged in
+  // Not logged in → show login form
   return (
     <div className="min-h-screen flex items-center justify-center">
       <Card className="w-full max-w-md">

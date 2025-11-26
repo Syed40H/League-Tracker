@@ -21,38 +21,54 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // keep session in sync
+  // Keep Supabase session in sync
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ?? null);
+    let isMounted = true;
+
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!isMounted) return;
+      if (error) {
+        console.error("Supabase getSession error:", error);
+      }
+      setUser(data?.session?.user ?? null);
       setLoading(false);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange(
+    const { data: authListener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
+        if (!isMounted) return;
         setUser(session?.user ?? null);
         setLoading(false);
       }
     );
 
     return () => {
-      sub.subscription.unsubscribe();
+      isMounted = false;
+      // safety check in case authListener is undefined
+      authListener?.subscription?.unsubscribe();
     };
   }, []);
 
-  // REAL SUPABASE LOGIN
+  // Real Supabase login
   const login = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    if (error) return { error: error.message };
+    if (error) {
+      console.error("Supabase login error:", error);
+      return { error: error.message };
+    }
+
     return {};
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("Supabase logout error:", error);
+    }
   };
 
   return (
