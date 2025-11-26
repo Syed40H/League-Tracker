@@ -1,4 +1,11 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 type AuthContextType = {
   loading: boolean;
@@ -12,20 +19,42 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<any>(null);
-  const [loading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // TEMP: fake login without Supabase
+  // 🔁 Keep Supabase auth session in sync
+  useEffect(() => {
+    // On first load, get current session
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
+      setLoading(false);
+    });
+
+    // Listen to login/logout changes
+    const { data: sub } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user ?? null);
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  // 🔐 Real login using Supabase Auth
   const login = async (email: string, password: string) => {
-    // change these if you want different credentials
-    if (email === "admin@test.com" && password === "password") {
-      setUser({ email });
-      return {};
-    }
-    return { error: "Invalid login" };
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) return { error: error.message };
+    return {};
   };
 
   const logout = async () => {
-    setUser(null);
+    await supabase.auth.signOut();
   };
 
   return (
@@ -33,7 +62,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       value={{
         loading,
         user,
-        isAdmin: !!user,
+        isAdmin: !!user, // any logged-in user is admin
         login,
         logout,
       }}

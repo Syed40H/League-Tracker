@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabaseClient";
 
 const Drivers = () => {
   const [leaguePlayers, setLeaguePlayers] = useState<LeaguePlayer[]>([]);
@@ -19,19 +20,51 @@ const Drivers = () => {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
 
+  // 🔁 Load league players from Supabase → then sync into localStorage
+  const fetchPlayers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("league_players")
+        .select("*")
+        .order("name", { ascending: true });
+
+      if (error) {
+        console.error("Error loading league_players from Supabase:", error);
+        // Fallback to local storage if Supabase fails
+        const localPlayers = storage.getLeaguePlayers();
+        setLeaguePlayers(localPlayers);
+        return;
+      }
+
+      if (data && Array.isArray(data)) {
+        const loaded: LeaguePlayer[] = data.map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          driverId: row.driver_id,
+        }));
+
+        setLeaguePlayers(loaded);
+        storage.setLeaguePlayers(loaded); // keep local in sync for standings display
+      }
+    } catch (err) {
+      console.error("Unexpected error loading league players:", err);
+      const localPlayers = storage.getLeaguePlayers();
+      setLeaguePlayers(localPlayers);
+    }
+  };
+
   useEffect(() => {
-    setLeaguePlayers(storage.getLeaguePlayers());
+    fetchPlayers();
   }, []);
 
   const assignedDriverIds = leaguePlayers.map((p) => p.driverId);
   const availableDrivers = drivers.filter((d) => !assignedDriverIds.includes(d.id));
 
-  const handleAddPlayer = () => {
-    // 🔒 Block non-admins
+  const handleAddPlayer = async () => {
     if (!isAdmin) {
       toast({
         title: "Not allowed",
-        description: "Only the league admin can add or edit players.",
+        description: "Only the league admin can add league players.",
         variant: "destructive",
       });
       return;
@@ -64,75 +97,67 @@ const Drivers = () => {
       return;
     }
 
-    const newPlayer: LeaguePlayer = {
-      id: Date.now().toString(),
+    // Insert into Supabase table
+    const { error } = await supabase.from("league_players").insert({
       name: newPlayerName.trim(),
-      driverId: selectedDriverId,
-    };
+      driver_id: selectedDriverId,
+    });
 
-    const updatedPlayers = [...leaguePlayers, newPlayer];
-    setLeaguePlayers(updatedPlayers);
-    storage.setLeaguePlayers(updatedPlayers);
+    if (error) {
+      console.error("Error inserting league_player:", error);
+      toast({
+        title: "Add failed",
+        description: "Could not save player to the server.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Player added",
+      description: `${newPlayerName.trim()} assigned to ${
+        drivers.find((d) => d.id === selectedDriverId)?.name || "driver"
+      }`,
+    });
 
     setNewPlayerName("");
     setSelectedDriverId("");
 
-    toast({
-      title: "Player added",
-      description: `${newPlayer.name} assigned to ${
-        drivers.find((d) => d.id === selectedDriverId)?.name
-      }`,
-    });
+    // Reload from Supabase to keep ids in sync
+    await fetchPlayers();
   };
 
-  const handleRemovePlayer = (playerId: string) => {
-    // 🔒 Block non-admins
+  const handleRemovePlayer = async (playerId: string) => {
     if (!isAdmin) {
       toast({
         title: "Not allowed",
-        description: "Only the league admin can remove players.",
+        description: "Only the league admin can remove league players.",
         variant: "destructive",
       });
       return;
     }
 
-    const updatedPlayers = leaguePlayers.filter((p) => p.id !== playerId);
-    setLeaguePlayers(updatedPlayers);
-    storage.setLeaguePlayers(updatedPlayers);
+    const confirmed = window.confirm("Remove this player from the league?");
+    if (!confirmed) return;
+
+    const { error } = await supabase.from("league_players").delete().eq("id", playerId);
+
+    if (error) {
+      console.error("Error deleting league_player:", error);
+      toast({
+        title: "Remove failed",
+        description: "Could not remove player on the server.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     toast({
       title: "Player removed",
-      description: "Driver assignment has been removed",
-    });
-  };
-
-  // 🔁 Reset everything (league players + race results)
-  const handleResetAll = () => {
-    if (!isAdmin) {
-      toast({
-        title: "Not allowed",
-        description: "Only the league admin can reset the league.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const confirmed = window.confirm(
-      "This will remove ALL league players and race results and reset everything back to default. Are you sure?"
-    );
-
-    if (!confirmed) return;
-
-    // Clear all app data from localStorage
-    localStorage.clear();
-
-    toast({
-      title: "League reset",
-      description: "All players and race results have been cleared.",
+      description: "Driver assignment has been removed.",
     });
 
-    // Reload the page so everything resets visually
-    window.location.reload();
+    await fetchPlayers();
   };
 
   return (
@@ -165,7 +190,7 @@ const Drivers = () => {
             <CardContent>
               {!isAdmin && (
                 <p className="text-sm text-muted-foreground mb-3">
-                  You can view assignments, but only the league admin can add or edit players.
+                  You can view league players, but only the admin can add or remove them.
                 </p>
               )}
               <div className="grid md:grid-cols-3 gap-4">
@@ -216,7 +241,7 @@ const Drivers = () => {
           <Card>
             <CardHeader>
               <CardTitle>Current Assignments</CardTitle>
-              <CardDescription>Your league player roster</CardDescription>
+              <CardDescription>Shared league player roster (from Supabase)</CardDescription>
             </CardHeader>
             <CardContent>
               {leaguePlayers.length === 0 ? (
@@ -258,15 +283,6 @@ const Drivers = () => {
               )}
             </CardContent>
           </Card>
-
-          {/* Admin-only: Reset League Data */}
-          {isAdmin && (
-            <div className="mt-8 flex justify-end">
-              <Button variant="destructive" onClick={handleResetAll}>
-                Reset League Data
-              </Button>
-            </div>
-          )}
         </div>
       </div>
     </div>
