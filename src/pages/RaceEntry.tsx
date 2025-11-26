@@ -80,9 +80,7 @@ const RaceEntry = () => {
             topTen: data.top_ten || Array(10).fill(""),
             driverOfTheDay: data.driver_of_the_day || "",
             fastestLap: data.fastest_lap || "",
-            mostOvertakes: data.most_overta
-
-kes || "",
+            mostOvertakes: data.most_overtakes || "",
             cleanestDriver: data.cleanest_driver || "",
           };
           storage.saveRaceResult(syncedResult);
@@ -156,32 +154,51 @@ kes || "",
       cleanestDriver,
     };
 
-    // 🔹 Save to Supabase (shared)
-    // First delete any existing row for this race (so we don't need ON CONFLICT)
-    const { error: deleteError } = await supabase
-      .from("race_results")
-      .delete()
-      .eq("race_id", race.id);
-
-    if (deleteError) {
-      console.error("Supabase delete before save error:", deleteError);
-      // continue anyway – worst case we just replace nothing
-    }
-
-    const { error } = await supabase.from("race_results").insert({
+    const payload = {
       race_id: race.id,
       top_ten: topTen,
       driver_of_the_day: driverOfTheDay,
       fastest_lap: fastestLap,
       most_overtakes: mostOvertakes,
       cleanest_driver: cleanestDriver,
-    });
+    };
 
-    if (error) {
-      console.error("Supabase save error:", error);
+    // 🔹 Upsert-style logic without ON CONFLICT (works even if race_id is not unique)
+    const { data: existingRow, error: fetchError } = await supabase
+      .from("race_results")
+      .select("id")
+      .eq("race_id", race.id)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error("Supabase fetch existing error:", fetchError);
       toast({
         title: "Save failed",
-        description: error.message || "Could not save to the server. Try again.",
+        description:
+          fetchError.message || "Could not check existing race result.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    let saveError = null;
+
+    if (existingRow) {
+      const { error } = await supabase
+        .from("race_results")
+        .update(payload)
+        .eq("id", existingRow.id);
+      saveError = error;
+    } else {
+      const { error } = await supabase.from("race_results").insert(payload);
+      saveError = error;
+    }
+
+    if (saveError) {
+      console.error("Supabase save error:", saveError);
+      toast({
+        title: "Save failed",
+        description: saveError.message || "Could not save to the server.",
         variant: "destructive",
       });
       return;
@@ -225,17 +242,51 @@ kes || "",
     setMostOvertakes("");
     setCleanestDriver("");
 
-    // 🔹 Delete any row for this race in Supabase
-    const { error } = await supabase
-      .from("race_results")
-      .delete()
-      .eq("race_id", race.id);
+    const payload = {
+      race_id: race.id,
+      top_ten: emptyTopTen,
+      driver_of_the_day: "",
+      fastest_lap: "",
+      most_overtakes: "",
+      cleanest_driver: "",
+    };
 
-    if (error) {
-      console.error("Supabase reset error:", error);
+    const { data: existingRow, error: fetchError } = await supabase
+      .from("race_results")
+      .select("id")
+      .eq("race_id", race.id)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error("Supabase fetch existing error (reset):", fetchError);
       toast({
         title: "Reset failed",
-        description: error.message || "Could not reset on the server.",
+        description:
+          fetchError.message || "Could not reset race on the server.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    let resetError = null;
+
+    if (existingRow) {
+      const { error } = await supabase
+        .from("race_results")
+        .update(payload)
+        .eq("id", existingRow.id);
+      resetError = error;
+    } else {
+      const { error } = await supabase.from("race_results").insert(payload);
+      resetError = error;
+    }
+
+    if (resetError) {
+      console.error("Supabase reset error:", resetError);
+      toast({
+        title: "Reset failed",
+        description:
+          resetError.message || "Could not reset race on the server.",
         variant: "destructive",
       });
       return;
