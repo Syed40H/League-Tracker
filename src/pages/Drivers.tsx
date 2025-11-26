@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Save, Trash2, RotateCcw } from "lucide-react";
 import { drivers } from "@/data/drivers";
 import { LeaguePlayer } from "@/types/league";
 import { Button } from "@/components/ui/button";
@@ -37,8 +37,7 @@ const Drivers = () => {
       try {
         const { data, error } = await supabase
           .from("league_players")
-          .select("*")
-          .order("created_at", { ascending: true });
+          .select("*");
 
         if (error) {
           console.error("Error loading league_players:", error);
@@ -185,6 +184,45 @@ const Drivers = () => {
     });
   };
 
+  const handleResetAllPlayers = async () => {
+    if (!isAdmin) {
+      toast({
+        title: "Not allowed",
+        description: "Only the league admin can reset league players.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "This will remove ALL league players (but not the real F1 drivers). Are you sure?"
+    );
+    if (!confirmed) return;
+
+    const { error } = await supabase
+      .from("league_players")
+      .delete()
+      .neq("id", ""); // delete all rows (id is never "")
+
+    if (error) {
+      console.error("Error resetting league_players:", error);
+      toast({
+        title: "Reset failed",
+        description:
+          error.message || "Could not reset league players on the server.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLeaguePlayers([]);
+
+    toast({
+      title: "League players reset",
+      description: "All league player assignments have been cleared.",
+    });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="racing-gradient min-h-screen">
@@ -260,9 +298,21 @@ const Drivers = () => {
 
           {/* Current Assignments */}
           <Card>
-            <CardHeader>
-              <CardTitle>Current Assignments</CardTitle>
-              <CardDescription>Your league player roster</CardDescription>
+            <CardHeader className="flex items-center justify-between">
+              <div>
+                <CardTitle>Current Assignments</CardTitle>
+                <CardDescription>Your league player roster</CardDescription>
+              </div>
+              {isAdmin && leaguePlayers.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResetAllPlayers}
+                >
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Reset League Players
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               {leaguePlayers.length === 0 ? (

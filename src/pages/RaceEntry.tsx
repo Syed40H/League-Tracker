@@ -80,7 +80,9 @@ const RaceEntry = () => {
             topTen: data.top_ten || Array(10).fill(""),
             driverOfTheDay: data.driver_of_the_day || "",
             fastestLap: data.fastest_lap || "",
-            mostOvertakes: data.most_overtakes || "",
+            mostOvertakes: data.most_overta
+
+kes || "",
             cleanestDriver: data.cleanest_driver || "",
           };
           storage.saveRaceResult(syncedResult);
@@ -154,20 +156,26 @@ const RaceEntry = () => {
       cleanestDriver,
     };
 
-    // Save to Supabase (shared)
-    const { error } = await supabase.from("race_results").upsert(
-      {
-        race_id: race.id,
-        top_ten: topTen,
-        driver_of_the_day: driverOfTheDay,
-        fastest_lap: fastestLap,
-        most_overtakes: mostOvertakes,
-        cleanest_driver: cleanestDriver,
-      },
-      {
-        onConflict: "race_id",
-      }
-    );
+    // 🔹 Save to Supabase (shared)
+    // First delete any existing row for this race (so we don't need ON CONFLICT)
+    const { error: deleteError } = await supabase
+      .from("race_results")
+      .delete()
+      .eq("race_id", race.id);
+
+    if (deleteError) {
+      console.error("Supabase delete before save error:", deleteError);
+      // continue anyway – worst case we just replace nothing
+    }
+
+    const { error } = await supabase.from("race_results").insert({
+      race_id: race.id,
+      top_ten: topTen,
+      driver_of_the_day: driverOfTheDay,
+      fastest_lap: fastestLap,
+      most_overtakes: mostOvertakes,
+      cleanest_driver: cleanestDriver,
+    });
 
     if (error) {
       console.error("Supabase save error:", error);
@@ -217,20 +225,11 @@ const RaceEntry = () => {
     setMostOvertakes("");
     setCleanestDriver("");
 
-    // Save blank to Supabase
-    const { error } = await supabase.from("race_results").upsert(
-      {
-        race_id: race.id,
-        top_ten: emptyTopTen,
-        driver_of_the_day: "",
-        fastest_lap: "",
-        most_overtakes: "",
-        cleanest_driver: "",
-      },
-      {
-        onConflict: "race_id",
-      }
-    );
+    // 🔹 Delete any row for this race in Supabase
+    const { error } = await supabase
+      .from("race_results")
+      .delete()
+      .eq("race_id", race.id);
 
     if (error) {
       console.error("Supabase reset error:", error);
