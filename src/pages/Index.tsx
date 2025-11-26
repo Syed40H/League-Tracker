@@ -1,72 +1,85 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Trophy, Users, Calendar, CheckCircle2, Award, Zap, TrendingUp } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Trophy,
+  Users,
+  Calendar,
+  CheckCircle2,
+  Award,
+  Zap,
+  TrendingUp,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { calculateDriverStandings, calculateConstructorStandings } from "@/lib/standings";
+import {
+  calculateDriverStandings,
+  calculateConstructorStandings,
+} from "@/lib/standings";
 import { races } from "@/data/races";
-import { storage } from "@/lib/storage";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabaseClient";
-import { RaceResult } from "@/types/league";
+import type { RaceResult } from "@/types/league";
 
 const Index = () => {
   const { isAdmin } = useAuth();
   const { toast } = useToast();
 
-  const [loading, setLoading] = useState(true);
+  const [raceResults, setRaceResults] = useState<RaceResult[]>([]);
+  const [loadingResults, setLoadingResults] = useState(true);
 
-  // 🔁 Sync race_results from Supabase → localStorage on load
+  // 🔹 Load race results from Supabase on mount
   useEffect(() => {
-    const syncResults = async () => {
-      try {
-        const { data, error } = await supabase.from("race_results").select("*");
-        if (error) {
-          console.error("Error loading race_results from Supabase:", error);
-          return;
-        }
+    const loadResults = async () => {
+      const { data, error } = await supabase.from("race_results").select("*");
 
-        if (data && Array.isArray(data)) {
-          data.forEach((row: any) => {
-            const result: RaceResult = {
-              raceId: row.race_id,
-              topTen: row.top_ten || Array(10).fill(""),
-              driverOfTheDay: row.driver_of_the_day || "",
-              fastestLap: row.fastest_lap || "",
-              mostOvertakes: row.most_overtakes || "",
-              cleanestDriver: row.cleanest_driver || "",
-            };
-
-            // keep localStorage in sync so standings & calendar use it
-            storage.saveRaceResult(result);
-          });
-        }
-      } finally {
-        setLoading(false);
+      if (error) {
+        console.error("Error loading race_results:", error);
+        toast({
+          title: "Error",
+          description: "Could not load race results from the server.",
+          variant: "destructive",
+        });
+        setLoadingResults(false);
+        return;
       }
+
+      const mapped: RaceResult[] =
+        (data || []).map((row: any) => ({
+          raceId: row.race_id,
+          topTen: row.top_ten || [],
+          driverOfTheDay: row.driver_of_the_day || "",
+          fastestLap: row.fastest_lap || "",
+          mostOvertakes: row.most_overtakes || "",
+          cleanestDriver: row.cleanest_driver || "",
+        })) ?? [];
+
+      setRaceResults(mapped);
+      setLoadingResults(false);
     };
 
-    syncResults();
-  }, []);
+    loadResults();
+  }, [toast]);
 
-  // 🔄 Loading state while we sync from Supabase
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <p className="text-muted-foreground">Loading league data...</p>
-      </div>
-    );
-  }
+  const driverStandings = calculateDriverStandings(raceResults);
+  const constructorStandings = calculateConstructorStandings(raceResults);
 
-  // After sync → normal logic using storage
-  const driverStandings = calculateDriverStandings();
-  const constructorStandings = calculateConstructorStandings();
-  const raceResults = storage.getRaceResults();
-
-  // Only mark a race as completed if all 10 positions are filled
+  // ✅ Only mark races as completed if all 10 positions are filled
   const completedRaceIds = new Set(
     raceResults
       .filter(
@@ -104,7 +117,6 @@ const Index = () => {
   const topMostOvertakes = getTopAwardHolder("mostOvertakes");
   const topCleanestDriver = getTopAwardHolder("cleanestDriver");
 
-  // Helper: nice display name
   const getDisplayName = (standing: any) => {
     if (!standing) return "";
     return standing.leaguePlayerName
@@ -112,8 +124,7 @@ const Index = () => {
       : standing.driverName;
   };
 
-  // 🧨 Reset everything: Supabase + localStorage (admin only)
-  const handleResetAll = async () => {
+  const handleResetAll = () => {
     if (!isAdmin) {
       toast({
         title: "Not allowed",
@@ -124,32 +135,29 @@ const Index = () => {
     }
 
     const confirmed = window.confirm(
-      "This will clear ALL race results (for everyone) and your local league data. Are you sure?"
+      "This will clear ALL race results and league player assignments locally. It does not yet clear Supabase rows. Are you sure?"
     );
+
     if (!confirmed) return;
 
-    // Delete all race_results rows in Supabase
-    const { error } = await supabase.from("race_results").delete().neq("race_id", 0);
-    if (error) {
-      console.error("Error resetting race_results in Supabase:", error);
-      toast({
-        title: "Reset failed",
-        description: "Could not clear race results on the server.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Clear localStorage on this device
+    // Still clears any old localStorage-based data
     localStorage.clear();
 
     toast({
-      title: "League reset",
-      description: "All race results have been cleared for everyone.",
+      title: "League reset (local)",
+      description: "Local saved data has been cleared.",
     });
 
     window.location.reload();
   };
+
+  if (loadingResults) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Loading race results…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -160,17 +168,23 @@ const Index = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Trophy className="h-8 w-8 text-primary" />
-                <h1 className="text-3xl font-bold text-foreground">F1 25 League Tracker</h1>
+                <h1 className="text-3xl font-bold text-foreground">
+                  F1 25 League Tracker
+                </h1>
               </div>
               <div className="flex items-center gap-3">
-                {/* Admin visible to everyone, login gate is on /admin */}
+                {/* Show Admin link for everyone, but only logged-in user can actually use it */}
                 <Link to="/admin">
                   <Button variant="outline" size="sm">
                     Admin
                   </Button>
                 </Link>
                 <Link to="/drivers">
-                  <Button size="icon" variant="outline" className="h-10 w-10">
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-10 w-10"
+                  >
                     <Users className="h-5 w-5" />
                   </Button>
                 </Link>
@@ -190,8 +204,10 @@ const Index = () => {
             <TabsContent value="drivers">
               <Card>
                 <CardHeader>
-                  <CardTitle>Drivers' Championship</CardTitle>
-                  <CardDescription>Current standings after all completed races</CardDescription>
+                  <CardTitle>Drivers&apos; Championship</CardTitle>
+                  <CardDescription>
+                    Current standings after all completed races
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto">
@@ -231,7 +247,9 @@ const Index = () => {
                             <TableCell className="font-semibold">
                               {standing.leaguePlayerName ? (
                                 <div>
-                                  <div className="text-primary">{standing.leaguePlayerName}</div>
+                                  <div className="text-primary">
+                                    {standing.leaguePlayerName}
+                                  </div>
                                   <div className="text-sm text-muted-foreground">
                                     ({standing.driverName})
                                   </div>
@@ -240,7 +258,9 @@ const Index = () => {
                                 standing.driverName
                               )}
                             </TableCell>
-                            <TableCell className="text-sm">{standing.team}</TableCell>
+                            <TableCell className="text-sm">
+                              {standing.team}
+                            </TableCell>
                             <TableCell className="text-right font-bold text-lg text-primary">
                               {standing.points}
                             </TableCell>
@@ -295,7 +315,9 @@ const Index = () => {
                         </div>
                         <span className="text-xs text-muted-foreground">
                           {topFastestLap
-                            ? `${getDisplayName(topFastestLap.standing)} (${topFastestLap.count})`
+                            ? `${getDisplayName(topFastestLap.standing)} (${
+                                topFastestLap.count
+                              })`
                             : "No awards yet"}
                         </span>
                       </div>
@@ -307,7 +329,9 @@ const Index = () => {
                         </div>
                         <span className="text-xs text-muted-foreground">
                           {topMostOvertakes
-                            ? `${getDisplayName(topMostOvertakes.standing)} (${topMostOvertakes.count})`
+                            ? `${getDisplayName(topMostOvertakes.standing)} (${
+                                topMostOvertakes.count
+                              })`
                             : "No awards yet"}
                         </span>
                       </div>
@@ -319,7 +343,9 @@ const Index = () => {
                         </div>
                         <span className="text-xs text-muted-foreground">
                           {topCleanestDriver
-                            ? `${getDisplayName(topCleanestDriver.standing)} (${topCleanestDriver.count})`
+                            ? `${getDisplayName(topCleanestDriver.standing)} (${
+                                topCleanestDriver.count
+                              })`
                             : "No awards yet"}
                         </span>
                       </div>
@@ -332,8 +358,10 @@ const Index = () => {
             <TabsContent value="constructors">
               <Card>
                 <CardHeader>
-                  <CardTitle>Constructors' Championship</CardTitle>
-                  <CardDescription>Team standings based on combined driver points</CardDescription>
+                  <CardTitle>Constructors&apos; Championship</CardTitle>
+                  <CardDescription>
+                    Team standings based on combined driver points
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Table>
@@ -346,14 +374,19 @@ const Index = () => {
                     </TableHeader>
                     <TableBody>
                       {constructorStandings.map((standing, index) => (
-                        <TableRow key={standing.team} className={index < 3 ? "bg-primary/5" : ""}>
+                        <TableRow
+                          key={standing.team}
+                          className={index < 3 ? "bg-primary/5" : ""}
+                        >
                           <TableCell className="font-bold">
                             {index === 0 && <span className="text-2xl">🥇</span>}
                             {index === 1 && <span className="text-2xl">🥈</span>}
                             {index === 2 && <span className="text-2xl">🥉</span>}
                             {index > 2 && index + 1}
                           </TableCell>
-                          <TableCell className="font-semibold">{standing.team}</TableCell>
+                          <TableCell className="font-semibold">
+                            {standing.team}
+                          </TableCell>
                           <TableCell className="text-right font-bold text-lg text-primary">
                             {standing.points}
                           </TableCell>
@@ -375,13 +408,19 @@ const Index = () => {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-bold text-foreground">2025 Race Calendar</h2>
+                <h2 className="text-2xl font-bold text-foreground">
+                  2025 Race Calendar
+                </h2>
                 <p className="text-muted-foreground mt-1">
                   {completedRaceIds.size} of 24 races completed
                 </p>
               </div>
               {isAdmin && (
-                <Button variant="destructive" size="sm" onClick={handleResetAll}>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleResetAll}
+                >
                   Reset League
                 </Button>
               )}
@@ -403,11 +442,17 @@ const Index = () => {
                           <div className="flex items-center gap-3">
                             <div className="text-4xl">{race.flag}</div>
                             <div>
-                              <div className="text-sm text-muted-foreground">Round {race.id}</div>
-                              <CardTitle className="text-lg leading-tight">{race.name}</CardTitle>
+                              <div className="text-sm text-muted-foreground">
+                                Round {race.id}
+                              </div>
+                              <CardTitle className="text-lg leading-tight">
+                                {race.name}
+                              </CardTitle>
                             </div>
                           </div>
-                          {isCompleted && <CheckCircle2 className="h-5 w-5 text-primary" />}
+                          {isCompleted && (
+                            <CheckCircle2 className="h-5 w-5 text-primary" />
+                          )}
                         </div>
                       </CardHeader>
                       <CardContent>
@@ -416,8 +461,12 @@ const Index = () => {
                             <Calendar className="h-4 w-4" />
                             {race.date}
                           </div>
-                          <div className="text-sm font-medium">{race.circuit}</div>
-                          <div className="text-xs text-muted-foreground">{race.country}</div>
+                          <div className="text-sm font-medium">
+                            {race.circuit}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {race.country}
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
