@@ -43,7 +43,8 @@ const Drivers = () => {
         console.error("Error loading league_players:", error);
         toast({
           title: "Error",
-          description: error.message || "Could not load league players from the server.",
+          description:
+            error.message || "Could not load league players from the server.",
           variant: "destructive",
         });
         return;
@@ -135,7 +136,6 @@ const Drivers = () => {
       return;
     }
 
-    // Update local state from returned row
     const newPlayer: LeaguePlayer = {
       id: data.id,
       name: data.name,
@@ -153,7 +153,7 @@ const Drivers = () => {
       }`,
     });
 
-    // 🔁 Re-fetch from DB to stay in sync (just in case)
+    // 🔁 keep in sync with DB
     await fetchPlayers();
   };
 
@@ -168,10 +168,13 @@ const Drivers = () => {
     }
 
     // 🔹 Delete from Supabase
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("league_players")
       .delete()
-      .eq("id", playerId);
+      .eq("id", playerId)
+      .select();
+
+    console.log("Delete response", { data, error });
 
     if (error) {
       console.error("Error deleting league_player:", error);
@@ -192,7 +195,7 @@ const Drivers = () => {
       description: "Driver assignment has been removed",
     });
 
-    // 🔁 Re-fetch to be 100% sure we match the DB
+    // 🔁 Re-fetch to be 100% aligned with DB
     await fetchPlayers();
   };
 
@@ -211,7 +214,10 @@ const Drivers = () => {
     );
     if (!confirmed) return;
 
-    const { error } = await supabase.from("league_players").delete().neq("id", "");
+    const { error } = await supabase
+      .from("league_players")
+      .delete()
+      .neq("id", "");
 
     if (error) {
       console.error("Error resetting league_players:", error);
@@ -231,7 +237,6 @@ const Drivers = () => {
       description: "All league player assignments have been cleared.",
     });
 
-    // 🔁 Ensure we’re in sync
     await fetchPlayers();
   };
 
