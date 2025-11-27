@@ -9,9 +9,9 @@ import Drivers from "./pages/Drivers";
 import Races from "./pages/Races";
 import RaceEntry from "./pages/RaceEntry";
 import Standings from "./pages/Standings";
+import Stats from "./pages/Stats";   // ⭐ NEW PAGE
 import NotFound from "./pages/NotFound";
 
-// ⭐ IMPORT ADMIN LOGIN PAGE
 import AdminLogin from "./pages/AdminLogin";
 
 const queryClient = new QueryClient();
@@ -29,10 +29,13 @@ const App = () => (
           <Route path="/race/:raceId" element={<RaceEntry />} />
           <Route path="/standings" element={<Standings />} />
 
-          {/* ⭐ ADMIN LOGIN ROUTE */}
-          <Route path="/admin" element={<AdminLogin />} /> 
+          {/* ⭐ NEW STATS PAGE */}
+          <Route path="/stats" element={<Stats />} />
 
-          {/* CATCH ALL */}
+          {/* ADMIN */}
+          <Route path="/admin" element={<AdminLogin />} />
+
+          {/* 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
