@@ -542,11 +542,7 @@ const Index = () => {
                                 key={d.driverId}
                                 type="monotone"
                                 dataKey={d.driverId}
-                                name={
-                                  d.leaguePlayerName
-                                    ? `${d.leaguePlayerName} (${d.driverName})`
-                                    : d.driverName
-                                }
+                                name={d.leaguePlayerName || d.driverName}
                                 strokeWidth={2}
                                 dot={false}
                                 isAnimationActive={false}
@@ -556,8 +552,7 @@ const Index = () => {
                         </ResponsiveContainer>
                       </div>
                     </TabsContent>
-
-                    {/* Finish Positions */}
+                                        {/* Finish Positions */}
                     <TabsContent value="positions">
                       <div className="h-[320px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
@@ -577,11 +572,7 @@ const Index = () => {
                                 key={d.driverId}
                                 type="monotone"
                                 dataKey={d.driverId}
-                                name={
-                                  d.leaguePlayerName
-                                    ? `${d.leaguePlayerName} (${d.driverName})`
-                                    : d.driverName
-                                }
+                                name={d.leaguePlayerName || d.driverName}
                                 strokeWidth={2}
                                 dot={false}
                                 isAnimationActive={false}
