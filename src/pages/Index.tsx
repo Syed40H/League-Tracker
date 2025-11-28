@@ -60,6 +60,9 @@ import {
 
 const POINTS_SYSTEM = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 
+// colours for driver lines
+const LINE_COLORS = ["#2563EB", "#16A34A", "#DC2626", "#F97316", "#0891B2", "#7C3AED"];
+
 // ---- Supabase fetch helpers ----
 async function fetchRaceResults(): Promise<RaceResult[]> {
   const { data, error } = await supabase
@@ -129,7 +132,7 @@ const Index = () => {
     [raceResults, leaguePlayers]
   );
 
-  // Which races have saved results (for the small summary in header if you want)
+  // Which races have saved results
   const completedRaceIds = useMemo(
     () =>
       new Set(
@@ -202,11 +205,15 @@ const Index = () => {
       averagePosition: s.totalTop10 > 0 ? s.sumPositions / s.totalTop10 : null,
     }));
 
-    // Sort: best avg position first; then more top10s; then points as tiebreak
     const pointsByDriver = new Map(
       driverStandings.map((ds) => [ds.driverId, ds.points] as const)
     );
 
+    // Better ranking logic:
+    // 1) more P1s, then more P2s, ... P10s
+    // 2) better average position
+    // 3) more top-10s
+    // 4) more points
     list.sort((a, b) => {
       const aHas = a.totalTop10 > 0;
       const bHas = b.totalTop10 > 0;
@@ -215,14 +222,23 @@ const Index = () => {
       if (!aHas) return 1;
       if (!bHas) return -1;
 
-      if (a.averagePosition! !== b.averagePosition!) {
-        return a.averagePosition! - b.averagePosition!;
+      // Step 1: compare distribution of P1..P10
+      for (let i = 0; i < 10; i++) {
+        const diff = (b.positionCounts[i] || 0) - (a.positionCounts[i] || 0);
+        if (diff !== 0) return diff;
       }
 
+      // Step 2: average position (lower is better)
+      const aAvg = a.averagePosition ?? 99;
+      const bAvg = b.averagePosition ?? 99;
+      if (aAvg !== bAvg) return aAvg - bAvg;
+
+      // Step 3: more top-10 finishes
       if (a.totalTop10 !== b.totalTop10) {
         return b.totalTop10 - a.totalTop10;
       }
 
+      // Step 4: points
       const pa = pointsByDriver.get(a.driverId) ?? 0;
       const pb = pointsByDriver.get(b.driverId) ?? 0;
       return pb - pa;
@@ -233,8 +249,7 @@ const Index = () => {
 
   // ---- Stats: race order + timelines for graphs ----
   const raceOrder = useMemo(
-    () =>
-      [...races].sort((a, b) => a.id - b.id), // assumes your race_ids follow this order
+    () => [...races].sort((a, b) => a.id - b.id),
     []
   );
 
@@ -252,6 +267,19 @@ const Index = () => {
       byRaceId.set(r.raceId, r);
     });
 
+    // Only go up to last race that actually has a result
+    const completed = raceResults.filter(
+      (r) => Array.isArray(r.topTen) && r.topTen.length > 0
+    );
+    const lastCompletedRaceId = completed.length
+      ? Math.max(...completed.map((r) => r.raceId))
+      : 0;
+
+    const effectiveRaceOrder =
+      lastCompletedRaceId > 0
+        ? raceOrder.filter((r) => r.id <= lastCompletedRaceId)
+        : [];
+
     // Cumulative points per driver
     const cumulative = new Map<string, number>();
     topDriversForGraphs.forEach((d) => cumulative.set(d.driverId, 0));
@@ -259,7 +287,7 @@ const Index = () => {
     const pointsData: any[] = [];
     const positionsData: any[] = [];
 
-    raceOrder.forEach((race) => {
+    effectiveRaceOrder.forEach((race) => {
       const rowPoints: any = {
         race: race.name,
       };
@@ -274,7 +302,7 @@ const Index = () => {
         result.topTen.forEach((driverId, index) => {
           const pts = index < POINTS_SYSTEM.length ? POINTS_SYSTEM[index] : 0;
           if (!cumulative.has(driverId)) {
-            // we only track topDriversForGraphs
+            // only track topDriversForGraphs
             return;
           }
           const prev = cumulative.get(driverId)!;
@@ -282,11 +310,10 @@ const Index = () => {
         });
       }
 
-      // Fill cumulative points for each tracked driver
+      // Fill cumulative points & positions for each tracked driver
       topDriversForGraphs.forEach((d) => {
         rowPoints[d.driverId] = cumulative.get(d.driverId) ?? 0;
 
-        // Positions graph (1–10, null if outside top 10 or no result)
         const pos =
           result && Array.isArray(result.topTen)
             ? result.topTen.indexOf(d.driverId)
@@ -469,6 +496,9 @@ const Index = () => {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* ⭐ Award Legend under Drivers tab */}
+              <AwardLegend standings={driverStandings} />
             </TabsContent>
 
             {/* 🏎 Constructors' Championship */}
@@ -509,7 +539,10 @@ const Index = () => {
 
             {/* 📊 Stats tab (graphs + breakdown) */}
             <TabsContent value="stats">
-              <Card>
+              {/* Award Legend also at top of Stats tab */}
+              <AwardLegend standings={driverStandings} />
+
+              <Card className="mt-6">
                 <CardHeader>
                   <CardTitle>League Stats</CardTitle>
                   <CardDescription>
@@ -537,12 +570,17 @@ const Index = () => {
                             <YAxis />
                             <Tooltip />
                             <Legend />
-                            {topDriversForGraphs.map((d) => (
+                            {topDriversForGraphs.map((d, idx) => (
                               <Line
                                 key={d.driverId}
                                 type="monotone"
                                 dataKey={d.driverId}
-                                name={d.leaguePlayerName || d.driverName}
+                                name={
+                                  d.leaguePlayerName
+                                    ? `${d.leaguePlayerName} (${d.driverName})`
+                                    : d.driverName
+                                }
+                                stroke={LINE_COLORS[idx % LINE_COLORS.length]}
                                 strokeWidth={2}
                                 dot={false}
                                 isAnimationActive={false}
@@ -552,7 +590,8 @@ const Index = () => {
                         </ResponsiveContainer>
                       </div>
                     </TabsContent>
-                                        {/* Finish Positions */}
+
+                    {/* Finish Positions */}
                     <TabsContent value="positions">
                       <div className="h-[320px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
@@ -567,12 +606,17 @@ const Index = () => {
                             />
                             <Tooltip />
                             <Legend />
-                            {topDriversForGraphs.map((d) => (
+                            {topDriversForGraphs.map((d, idx) => (
                               <Line
                                 key={d.driverId}
                                 type="monotone"
                                 dataKey={d.driverId}
-                                name={d.leaguePlayerName || d.driverName}
+                                name={
+                                  d.leaguePlayerName
+                                    ? `${d.leaguePlayerName} (${d.driverName})`
+                                    : d.driverName
+                                }
+                                stroke={LINE_COLORS[idx % LINE_COLORS.length]}
                                 strokeWidth={2}
                                 dot={false}
                                 isAnimationActive={false}
@@ -662,6 +706,119 @@ const Index = () => {
         </main>
       </div>
     </div>
+  );
+};
+
+// ⭐ Reusable Award Legend
+type AwardLegendProps = {
+  standings: Array<{
+    driverId: string;
+    driverName: string;
+    leaguePlayerName?: string;
+    awards: {
+      driverOfTheDay: number;
+      fastestLap: number;
+      mostOvertakes: number;
+      cleanestDriver: number;
+    };
+  }>;
+};
+
+const AwardLegend = ({ standings }: AwardLegendProps) => {
+  if (!standings.length) return null;
+
+  const getLeader = (
+    key: "driverOfTheDay" | "fastestLap" | "mostOvertakes" | "cleanestDriver"
+  ) => {
+    let best:
+      | {
+          driverName: string;
+          leaguePlayerName?: string;
+          count: number;
+        }
+      | null = null;
+
+    standings.forEach((s) => {
+      const count = s.awards?.[key] ?? 0;
+      if (!best || count > best.count) {
+        best = {
+          driverName: s.driverName,
+          leaguePlayerName: s.leaguePlayerName,
+          count,
+        };
+      }
+    });
+
+    if (!best || best.count === 0) return null;
+    return best;
+  };
+
+  const dotd = getLeader("driverOfTheDay");
+  const fl = getLeader("fastestLap");
+  const mo = getLeader("mostOvertakes");
+  const clean = getLeader("cleanestDriver");
+
+  if (!dotd && !fl && !mo && !clean) return null;
+
+  const renderName = (leader: NonNullable<typeof dotd>) =>
+    leader.leaguePlayerName
+      ? `${leader.leaguePlayerName} (${leader.driverName})`
+      : leader.driverName;
+
+  return (
+    <Card className="mt-6">
+      <CardHeader>
+        <CardTitle className="text-sm font-semibold">Award Legend</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 text-sm">
+          {dotd && (
+            <div className="flex items-start gap-2">
+              <Award className="h-4 w-4 mt-0.5 text-primary" />
+              <div>
+                <div className="font-medium">Driver of the Day</div>
+                <div className="text-muted-foreground">
+                  {renderName(dotd)} ({dotd.count})
+                </div>
+              </div>
+            </div>
+          )}
+          {fl && (
+            <div className="flex items-start gap-2">
+              <Zap className="h-4 w-4 mt-0.5 text-green-500" />
+              <div>
+                <div className="font-medium">Fastest Lap</div>
+                <div className="text-muted-foreground">
+                  {renderName(fl)} ({fl.count})
+                </div>
+              </div>
+            </div>
+          )}
+          {mo && (
+            <div className="flex items-start gap-2">
+              <TrendingUp className="h-4 w-4 mt-0.5 text-blue-500" />
+              <div>
+                <div className="font-medium">Most Overtakes</div>
+                <div className="text-muted-foreground">
+                  {renderName(mo)} ({mo.count})
+                </div>
+              </div>
+            </div>
+          )}
+          {clean && (
+            <div className="flex items-start gap-2">
+              <Award className="h-4 w-4 mt-0.5 text-purple-500" />
+              <div>
+                <div className="font-medium">Cleanest Driver</div>
+                <div className="text-muted-foreground">
+                  {renderName(clean)} ({clean.count})
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 
