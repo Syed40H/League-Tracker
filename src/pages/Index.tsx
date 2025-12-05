@@ -19,7 +19,7 @@ import { drivers, driverById, teamColorByTeam } from "@/data/drivers";
 import {
   calculateDriverStandings,
   calculateConstructorStandings,
-  type TeamOverrideMap,
+  TeamOverrideMap,
 } from "@/lib/standings";
 import {
   useDriverOverrides,
@@ -122,30 +122,38 @@ const Index = () => {
     queryFn: fetchLeaguePlayers,
   });
 
-  // 🔹 Supabase-backed driver team overrides
+  // 🔹 NEW: driver team overrides from Supabase (shared for everyone)
   const {
-    data: overrideRows = [],
+    data: driverOverrides = [],
     isLoading: loadingOverrides,
     error: overridesError,
   } = useDriverOverrides();
 
-  const teamOverrides: TeamOverrideMap = useMemo(
-    () => buildTeamOverrideMap(overrideRows),
-    [overrideRows]
+  const teamOverrideMap: TeamOverrideMap = useMemo(
+    () => buildTeamOverrideMap(driverOverrides || []),
+    [driverOverrides]
   );
 
   const loading = loadingResults || loadingPlayers || loadingOverrides;
 
   const driverStandings = useMemo(
     () =>
-      calculateDriverStandings(raceResults, leaguePlayers, teamOverrides),
-    [raceResults, leaguePlayers, teamOverrides]
+      calculateDriverStandings(
+        raceResults,
+        leaguePlayers,
+        teamOverrideMap
+      ),
+    [raceResults, leaguePlayers, teamOverrideMap]
   );
 
   const constructorStandings = useMemo(
     () =>
-      calculateConstructorStandings(raceResults, leaguePlayers, teamOverrides),
-    [raceResults, leaguePlayers, teamOverrides]
+      calculateConstructorStandings(
+        raceResults,
+        leaguePlayers,
+        teamOverrideMap
+      ),
+    [raceResults, leaguePlayers, teamOverrideMap]
   );
 
   // Which races have saved results
@@ -159,30 +167,17 @@ const Index = () => {
     [raceResults]
   );
 
-  if (raceError) {
-    console.error(raceError);
-  }
-  if (playersError) {
-    console.error(playersError);
-  }
-  if (overridesError) {
-    console.error(overridesError);
-  }
+  if (raceError) console.error(raceError);
+  if (playersError) console.error(playersError);
+  if (overridesError) console.error(overridesError);
 
-  // 🔹 Get colour for a driver/team, respecting overrides
+  // 🔹 Helper to pick the right color respecting overrides
   const getTeamColor = (driverId: string, teamName: string): string => {
-    const override = teamOverrides[driverId];
-    const effectiveTeam = override?.team ?? teamName;
-
-    // If they saved a custom color in driver_overrides, use that
+    const override = teamOverrideMap[driverId];
     if (override?.teamColor) return override.teamColor;
-
-    // Otherwise use default team palette
-    if (teamColorByTeam[effectiveTeam]) return teamColorByTeam[effectiveTeam];
-
-    // Fallback to driver base color or gray
+    if (teamColorByTeam[teamName]) return teamColorByTeam[teamName];
     const meta = driverById[driverId];
-    return meta?.teamColor ?? "#6B7280";
+    return meta?.teamColor ?? "#6B7280"; // fallback gray
   };
 
   // ---- Stats: driver placement breakdown ----
@@ -208,13 +203,15 @@ const Index = () => {
       if (p.driverId) byDriver.set(p.driverId, p);
     });
 
-    // Seed all drivers (start with base team; we'll override from standings later)
+    // Seed all drivers — use overridden team if exists
     drivers.forEach((d) => {
       const lp = byDriver.get(d.id);
+      const override = teamOverrideMap[d.id];
+
       statsMap.set(d.id, {
         driverId: d.id,
         driverName: d.name,
-        team: d.team,
+        team: override?.team ?? d.team,
         leaguePlayerName: lp?.name,
         positionCounts: Array(10).fill(0),
         totalTop10: 0,
@@ -240,23 +237,15 @@ const Index = () => {
       });
     });
 
-    const list = Array.from(statsMap.values()).map((s) => {
-      const standing = driverStandings.find(
-        (ds) => ds.driverId === s.driverId
-      );
-      const effectiveTeam = standing?.team ?? s.team;
-
-      return {
-        driverId: s.driverId,
-        driverName: s.driverName,
-        team: effectiveTeam,
-        leaguePlayerName: s.leaguePlayerName,
-        positionCounts: s.positionCounts,
-        totalTop10: s.totalTop10,
-        averagePosition:
-          s.totalTop10 > 0 ? s.sumPositions / s.totalTop10 : null,
-      };
-    });
+    const list = Array.from(statsMap.values()).map((s) => ({
+      driverId: s.driverId,
+      driverName: s.driverName,
+      team: s.team,
+      leaguePlayerName: s.leaguePlayerName,
+      positionCounts: s.positionCounts,
+      totalTop10: s.totalTop10,
+      averagePosition: s.totalTop10 > 0 ? s.sumPositions / s.totalTop10 : null,
+    }));
 
     const pointsByDriver = new Map(
       driverStandings.map((ds) => [ds.driverId, ds.points] as const)
@@ -298,7 +287,7 @@ const Index = () => {
     });
 
     return list;
-  }, [raceResults, leaguePlayers, driverStandings, teamOverrides]);
+  }, [raceResults, leaguePlayers, driverStandings, teamOverrideMap]);
 
   // ---- Stats: race order + timelines for graphs ----
   const raceOrder = useMemo(
@@ -419,6 +408,13 @@ const Index = () => {
                 <Button variant="outline">
                   <Users className="mr-2 h-4 w-4" />
                   Add League Players
+                </Button>
+              </Link>
+
+              <Link to="/grid">
+                <Button variant="outline">
+                  <BarChart3 className="mr-2 h-4 w-4" />
+                  F1 Grid Team Editor
                 </Button>
               </Link>
 

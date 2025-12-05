@@ -9,10 +9,12 @@ import Drivers from "./pages/Drivers";
 import Races from "./pages/Races";
 import RaceEntry from "./pages/RaceEntry";
 import Standings from "./pages/Standings";
-import Stats from "./pages/Stats";   // ⭐ NEW PAGE
+import Stats from "./pages/Stats"; // ⭐ STATS PAGE
 import NotFound from "./pages/NotFound";
-
 import AdminLogin from "./pages/AdminLogin";
+
+// ⭐ NEW: F1 Grid Team Editor page
+import GridTeamEditor from "./pages/GridTeamEditor";
 
 const queryClient = new QueryClient();
 
@@ -28,9 +30,10 @@ const App = () => (
           <Route path="/races" element={<Races />} />
           <Route path="/race/:raceId" element={<RaceEntry />} />
           <Route path="/standings" element={<Standings />} />
-
-          {/* ⭐ NEW STATS PAGE */}
           <Route path="/stats" element={<Stats />} />
+
+          {/* ⭐ NEW ROUTE FOR GRID EDITOR */}
+          <Route path="/grid" element={<GridTeamEditor />} />
 
           {/* ADMIN */}
           <Route path="/admin" element={<AdminLogin />} />

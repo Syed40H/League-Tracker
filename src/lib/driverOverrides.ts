@@ -97,7 +97,9 @@ export async function upsertDriverTeamOverride(
 /**
  * Remove override → revert driver back to default team
  */
-export async function deleteDriverTeamOverride(driverId: string): Promise<void> {
+export async function deleteDriverTeamOverride(
+  driverId: string
+): Promise<void> {
   const { error } = await supabase
     .from(TABLE)
     .delete()
@@ -105,12 +107,11 @@ export async function deleteDriverTeamOverride(driverId: string): Promise<void> 
 
   if (error) {
     console.error("❌ Error deleting team override:", error);
-    throw error;
   }
 }
 
 /**
- * Optional helper: get final driver list with overrides applied.
+ * Optional helper: return drivers with overrides applied.
  */
 export async function getFinalDriverList() {
   const overrides = await fetchDriverTeamOverrides();

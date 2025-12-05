@@ -8,12 +8,12 @@ import type {
 
 const POINTS_SYSTEM = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 
-// 🔹 Team overrides passed in from the app (Supabase-backed)
+// 🔹 Shared type: driverId → overridden team + color
 export type TeamOverrideMap = Record<
   string,
   {
     team: string;
-    teamColor?: string;
+    teamColor: string;
   }
 >;
 
@@ -35,9 +35,8 @@ export function calculateDriverStandings(
   // Initialize all drivers
   drivers.forEach((driver) => {
     const leaguePlayer = leagueByDriver.get(driver.id);
-
-    // ✅ If there's an override, use that team instead of default
     const override = teamOverrides[driver.id];
+
     const effectiveTeam = override?.team ?? driver.team;
 
     standingsMap.set(driver.id, {
@@ -96,7 +95,7 @@ export function calculateConstructorStandings(
   leaguePlayers: LeaguePlayer[] = [],
   teamOverrides: TeamOverrideMap = {}
 ): ConstructorStanding[] {
-  // ✅ Uses the possibly overridden team from DriverStanding
+  // 👇 Uses overridden team from DriverStanding
   const driverStandings = calculateDriverStandings(
     raceResults,
     leaguePlayers,
