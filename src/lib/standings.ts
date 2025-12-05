@@ -1,4 +1,5 @@
 import { drivers } from "@/data/drivers";
+import { storage } from "@/lib/storage"; // ⭐ NEW
 import type {
   DriverStanding,
   ConstructorStanding,
@@ -14,6 +15,11 @@ export function calculateDriverStandings(
 ): DriverStanding[] {
   const standingsMap = new Map<string, DriverStanding>();
 
+  // 🔹 Load driver team overrides from storage
+  const teamOverrides = storage.getDriverTeamOverrides
+    ? storage.getDriverTeamOverrides()
+    : {};
+
   // Quick lookup: driverId -> league player
   const leagueByDriver = new Map<string, LeaguePlayer>();
   leaguePlayers.forEach((p) => {
@@ -26,10 +32,14 @@ export function calculateDriverStandings(
   drivers.forEach((driver) => {
     const leaguePlayer = leagueByDriver.get(driver.id);
 
+    // If there's an override, use that team instead of default
+    const override = teamOverrides[driver.id];
+    const effectiveTeam = override?.team ?? driver.team;
+
     standingsMap.set(driver.id, {
       driverId: driver.id,
       driverName: driver.name,
-      team: driver.team,
+      team: effectiveTeam,
       leaguePlayerName: leaguePlayer?.name,
       points: 0,
       awards: {
@@ -81,6 +91,7 @@ export function calculateConstructorStandings(
   raceResults: RaceResult[],
   leaguePlayers: LeaguePlayer[] = []
 ): ConstructorStanding[] {
+  // 👇 This already uses the (possibly overridden) team from DriverStanding
   const driverStandings = calculateDriverStandings(raceResults, leaguePlayers);
 
   const constructorMap = new Map<string, number>();

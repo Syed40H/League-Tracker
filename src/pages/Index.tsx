@@ -15,7 +15,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabaseClient";
 import { races } from "@/data/races";
-import { drivers } from "@/data/drivers";
+import { drivers, driverById } from "@/data/drivers";
 import {
   calculateDriverStandings,
   calculateConstructorStandings,
@@ -59,9 +59,6 @@ import {
 } from "recharts";
 
 const POINTS_SYSTEM = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
-
-// colours for driver lines
-const LINE_COLORS = ["#2563EB", "#16A34A", "#DC2626", "#F97316", "#0891B2", "#7C3AED"];
 
 // ---- Supabase fetch helpers ----
 async function fetchRaceResults(): Promise<RaceResult[]> {
@@ -155,7 +152,10 @@ const Index = () => {
   };
 
   const driverPlacementStats: DriverPlacementStats[] = useMemo(() => {
-    const statsMap = new Map<string, DriverPlacementStats & { sumPositions: number }>();
+    const statsMap = new Map<
+      string,
+      DriverPlacementStats & { sumPositions: number }
+    >();
 
     // Fast lookup of league player by driverId
     const byDriver = new Map<string, LeaguePlayer>();
@@ -449,48 +449,61 @@ const Index = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {driverStandings.map((standing, index) => (
-                          <TableRow key={standing.driverId}>
-                            <TableCell>{index + 1}</TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="font-medium">
-                                  {standing.driverName}
-                                </span>
-                                {standing.leaguePlayerName && (
-                                  <span className="text-xs text-muted-foreground">
-                                    League: {standing.leaguePlayerName}
-                                  </span>
-                                )}
-                              </div>
-                            </TableCell>
-                            {!compactView && (
-                              <TableCell className="text-sm">
-                                {standing.team}
-                              </TableCell>
-                            )}
-                            <TableCell className="text-right font-semibold">
-                              {standing.points}
-                            </TableCell>
+                        {driverStandings.map((standing, index) => {
+                          const driverMeta = driverById[standing.driverId];
+                          const teamColor = driverMeta?.teamColor;
 
-                            {!compactView && (
-                              <>
-                                <TableCell className="text-center text-xs">
-                                  {standing.awards.driverOfTheDay || "–"}
+                          return (
+                            <TableRow key={standing.driverId}>
+                              <TableCell>{index + 1}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">
+                                    {standing.driverName}
+                                  </span>
+                                  {standing.leaguePlayerName && (
+                                    <span className="text-xs text-muted-foreground">
+                                      League: {standing.leaguePlayerName}
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              {!compactView && (
+                                <TableCell className="text-sm">
+                                  <div className="flex items-center gap-2">
+                                    {teamColor && (
+                                      <span
+                                        className="inline-block h-3 w-3 rounded-full"
+                                        style={{ backgroundColor: teamColor }}
+                                      />
+                                    )}
+                                    {standing.team}
+                                  </div>
                                 </TableCell>
-                                <TableCell className="text-center text-xs">
-                                  {standing.awards.fastestLap || "–"}
-                                </TableCell>
-                                <TableCell className="text-center text-xs">
-                                  {standing.awards.mostOvertakes || "–"}
-                                </TableCell>
-                                <TableCell className="text-center text-xs">
-                                  {standing.awards.cleanestDriver || "–"}
-                                </TableCell>
-                              </>
-                            )}
-                          </TableRow>
-                        ))}
+                              )}
+                              <TableCell className="text-right font-semibold">
+                                {standing.points}
+                              </TableCell>
+
+                              {!compactView && (
+                                <>
+                                  <TableCell className="text-center text-xs">
+                                    {standing.awards.driverOfTheDay || "–"}
+                                  </TableCell>
+                                  <TableCell className="text-center text-xs">
+                                    {standing.awards.fastestLap || "–"}
+                                  </TableCell>
+                                  <TableCell className="text-center text-xs">
+                                    {standing.awards.mostOvertakes || "–"}
+                                  </TableCell>
+                                  <TableCell className="text-center text-xs">
+                                    {standing.awards.cleanestDriver || "–"}
+                                  </TableCell>
+                                </>
+                              )}
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -570,22 +583,26 @@ const Index = () => {
                             <YAxis />
                             <Tooltip />
                             <Legend />
-                            {topDriversForGraphs.map((d, idx) => (
-                              <Line
-                                key={d.driverId}
-                                type="monotone"
-                                dataKey={d.driverId}
-                                name={
-                                  d.leaguePlayerName
-                                    ? `${d.leaguePlayerName} (${d.driverName})`
-                                    : d.driverName
-                                }
-                                stroke={LINE_COLORS[idx % LINE_COLORS.length]}
-                                strokeWidth={2}
-                                dot={false}
-                                isAnimationActive={false}
-                              />
-                            ))}
+                            {topDriversForGraphs.map((d) => {
+                              const meta = driverById[d.driverId];
+                              const teamColor = meta?.teamColor ?? "#6B7280";
+                              return (
+                                <Line
+                                  key={d.driverId}
+                                  type="monotone"
+                                  dataKey={d.driverId}
+                                  name={
+                                    d.leaguePlayerName
+                                      ? `${d.leaguePlayerName} (${d.driverName})`
+                                      : d.driverName
+                                  }
+                                  stroke={teamColor}
+                                  strokeWidth={2}
+                                  dot={false}
+                                  isAnimationActive={false}
+                                />
+                              );
+                            })}
                           </LineChart>
                         </ResponsiveContainer>
                       </div>
@@ -606,22 +623,26 @@ const Index = () => {
                             />
                             <Tooltip />
                             <Legend />
-                            {topDriversForGraphs.map((d, idx) => (
-                              <Line
-                                key={d.driverId}
-                                type="monotone"
-                                dataKey={d.driverId}
-                                name={
-                                  d.leaguePlayerName
-                                    ? `${d.leaguePlayerName} (${d.driverName})`
-                                    : d.driverName
-                                }
-                                stroke={LINE_COLORS[idx % LINE_COLORS.length]}
-                                strokeWidth={2}
-                                dot={false}
-                                isAnimationActive={false}
-                              />
-                            ))}
+                            {topDriversForGraphs.map((d) => {
+                              const meta = driverById[d.driverId];
+                              const teamColor = meta?.teamColor ?? "#6B7280";
+                              return (
+                                <Line
+                                  key={d.driverId}
+                                  type="monotone"
+                                  dataKey={d.driverId}
+                                  name={
+                                    d.leaguePlayerName
+                                      ? `${d.leaguePlayerName} (${d.driverName})`
+                                      : d.driverName
+                                  }
+                                  stroke={teamColor}
+                                  strokeWidth={2}
+                                  dot={false}
+                                  isAnimationActive={false}
+                                />
+                              );
+                            })}
                           </LineChart>
                         </ResponsiveContainer>
                       </div>
@@ -662,40 +683,55 @@ const Index = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {driverPlacementStats.map((s, idx) => (
-                          <TableRow key={s.driverId}>
-                            <TableCell>{idx + 1}</TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="font-medium">
-                                  {s.driverName}
-                                </span>
-                                {s.leaguePlayerName && (
-                                  <span className="text-xs text-muted-foreground">
-                                    League: {s.leaguePlayerName}
+                        {driverPlacementStats.map((s, idx) => {
+                          const meta = driverById[s.driverId];
+                          const teamColor = meta?.teamColor;
+
+                          return (
+                            <TableRow key={s.driverId}>
+                              <TableCell>{idx + 1}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">
+                                    {s.driverName}
                                   </span>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>{s.team}</TableCell>
-                            <TableCell className="text-center">
-                              {s.totalTop10}
-                            </TableCell>
-                            {s.positionCounts.map((count, i) => (
-                              <TableCell
-                                key={i}
-                                className="text-center text-xs"
-                              >
-                                {count || "–"}
+                                  {s.leaguePlayerName && (
+                                    <span className="text-xs text-muted-foreground">
+                                      League: {s.leaguePlayerName}
+                                    </span>
+                                  )}
+                                </div>
                               </TableCell>
-                            ))}
-                            <TableCell className="text-center">
-                              {s.averagePosition
-                                ? s.averagePosition.toFixed(2)
-                                : "–"}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  {teamColor && (
+                                    <span
+                                      className="inline-block h-3 w-3 rounded-full"
+                                      style={{ backgroundColor: teamColor }}
+                                    />
+                                  )}
+                                  {s.team}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {s.totalTop10}
+                              </TableCell>
+                              {s.positionCounts.map((count, i) => (
+                                <TableCell
+                                  key={i}
+                                  className="text-center text-xs"
+                                >
+                                  {count || "–"}
+                                </TableCell>
+                              ))}
+                              <TableCell className="text-center">
+                                {s.averagePosition
+                                  ? s.averagePosition.toFixed(2)
+                                  : "–"}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>

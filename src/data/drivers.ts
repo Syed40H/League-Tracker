@@ -222,3 +222,17 @@ export const teams = [
   "Kick Sauber",
   "Alpine",
 ];
+
+// 🔹 Helper: quick lookup by driverId
+export const driverById: Record<string, Driver> = Object.fromEntries(
+  drivers.map((d) => [d.id, d])
+);
+
+// 🔹 Helper: team -> teamColor (first color found for that team)
+export const teamColorByTeam: Record<string, string> = drivers.reduce(
+  (acc, d) => {
+    if (!acc[d.team]) acc[d.team] = d.teamColor;
+    return acc;
+  },
+  {} as Record<string, string>
+);
