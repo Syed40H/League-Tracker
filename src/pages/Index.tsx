@@ -15,7 +15,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabaseClient";
 import { races } from "@/data/races";
-import { drivers, driverById } from "@/data/drivers";
+import { drivers, driverById, teamColorByTeam } from "@/data/drivers";
 import {
   calculateDriverStandings,
   calculateConstructorStandings,
@@ -57,6 +57,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
+import { storage } from "@/lib/storage";
 
 const POINTS_SYSTEM = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 
@@ -139,6 +140,20 @@ const Index = () => {
       ),
     [raceResults]
   );
+
+  // 🔹 Load driver team overrides (for colours & teams)
+  const driverTeamOverrides = useMemo(
+    () => storage.getDriverTeamOverrides(),
+    []
+  );
+
+  const getTeamColor = (driverId: string, teamName: string): string => {
+    const override = driverTeamOverrides[driverId];
+    if (override?.teamColor) return override.teamColor;
+    if (teamColorByTeam[teamName]) return teamColorByTeam[teamName];
+    const meta = driverById[driverId];
+    return meta?.teamColor ?? "#6B7280"; // fallback gray
+  };
 
   // ---- Stats: driver placement breakdown ----
   type DriverPlacementStats = {
@@ -450,8 +465,10 @@ const Index = () => {
                       </TableHeader>
                       <TableBody>
                         {driverStandings.map((standing, index) => {
-                          const driverMeta = driverById[standing.driverId];
-                          const teamColor = driverMeta?.teamColor;
+                          const teamColor = getTeamColor(
+                            standing.driverId,
+                            standing.team
+                          );
 
                           return (
                             <TableRow key={standing.driverId}>
@@ -471,12 +488,10 @@ const Index = () => {
                               {!compactView && (
                                 <TableCell className="text-sm">
                                   <div className="flex items-center gap-2">
-                                    {teamColor && (
-                                      <span
-                                        className="inline-block h-3 w-3 rounded-full"
-                                        style={{ backgroundColor: teamColor }}
-                                      />
-                                    )}
+                                    <span
+                                      className="inline-block h-3 w-3 rounded-full"
+                                      style={{ backgroundColor: teamColor }}
+                                    />
                                     {standing.team}
                                   </div>
                                 </TableCell>
@@ -534,15 +549,27 @@ const Index = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {constructorStandings.map((team, index) => (
-                          <TableRow key={team.team}>
-                            <TableCell>{index + 1}</TableCell>
-                            <TableCell>{team.team}</TableCell>
-                            <TableCell className="text-right font-semibold">
-                              {team.points}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {constructorStandings.map((team, index) => {
+                          const teamColor =
+                            teamColorByTeam[team.team] ?? "#6B7280";
+                          return (
+                            <TableRow key={team.team}>
+                              <TableCell>{index + 1}</TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className="inline-block h-3 w-3 rounded-full"
+                                    style={{ backgroundColor: teamColor }}
+                                  />
+                                  {team.team}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right font-semibold">
+                                {team.points}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -584,8 +611,10 @@ const Index = () => {
                             <Tooltip />
                             <Legend />
                             {topDriversForGraphs.map((d) => {
-                              const meta = driverById[d.driverId];
-                              const teamColor = meta?.teamColor ?? "#6B7280";
+                              const teamColor = getTeamColor(
+                                d.driverId,
+                                d.team
+                              );
                               return (
                                 <Line
                                   key={d.driverId}
@@ -624,8 +653,10 @@ const Index = () => {
                             <Tooltip />
                             <Legend />
                             {topDriversForGraphs.map((d) => {
-                              const meta = driverById[d.driverId];
-                              const teamColor = meta?.teamColor ?? "#6B7280";
+                              const teamColor = getTeamColor(
+                                d.driverId,
+                                d.team
+                              );
                               return (
                                 <Line
                                   key={d.driverId}
@@ -684,8 +715,7 @@ const Index = () => {
                       </TableHeader>
                       <TableBody>
                         {driverPlacementStats.map((s, idx) => {
-                          const meta = driverById[s.driverId];
-                          const teamColor = meta?.teamColor;
+                          const teamColor = getTeamColor(s.driverId, s.team);
 
                           return (
                             <TableRow key={s.driverId}>
@@ -704,12 +734,10 @@ const Index = () => {
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-2">
-                                  {teamColor && (
-                                    <span
-                                      className="inline-block h-3 w-3 rounded-full"
-                                      style={{ backgroundColor: teamColor }}
-                                    />
-                                  )}
+                                  <span
+                                    className="inline-block h-3 w-3 rounded-full"
+                                    style={{ backgroundColor: teamColor }}
+                                  />
                                   {s.team}
                                 </div>
                               </TableCell>
