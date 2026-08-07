@@ -10,7 +10,10 @@ A web app for running a custom F1 25 racing league with friends. Track race resu
 - Track special awards: Driver of the Day, Fastest Lap, Most Overtakes, Cleanest Driver
 - Auto-updating Drivers' and Constructors' Championships
 - Career stats for special achievements
-- All data saved locally in the browser — no backend required
+
+
+<img width="1400" height="902" alt="Screenshot 2026-08-06 202631" src="https://github.com/user-attachments/assets/540687e7-ca04-4b15-b010-a16342a6f252" />
+
 
 ## Tech Stack
 
